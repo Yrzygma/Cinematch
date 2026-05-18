@@ -221,11 +221,9 @@ export default function CineMatch() {
 
   // Genre phase
   const [genreIdx, setGenreIdx] = useState(0);
-  const [myGenreLikes, setMyGenreLikes] = useState(new Set());
   const [partnerGenreLikes, setPartnerGenreLikes] = useState(new Set());
   const [matchedGenres, setMatchedGenres] = useState([]);
   const [genreMatch, setGenreMatch] = useState(null);
-  const [pendingGenreMatch, setPendingGenreMatch] = useState(null);
 
   // Movie phase
   const [selGenre, setSelGenre] = useState(null);
@@ -295,21 +293,21 @@ export default function CineMatch() {
 
     return () => supabase.removeChannel(channel);
   }, [sessionId, userId, myName]);
-
-  // Check for genre match when partner likes update
+  
   useEffect(() => {
-    if (!pendingGenreMatch) return;
-    const { gIdx, genre } = pendingGenreMatch;
-    if (partnerGenreLikes.has(gIdx)) {
-      setMatchedGenres(prev => {
-        if (prev.find(g => g.id === genre.id)) return prev;
-        return [...prev, genre];
-      });
-      setGenreMatch(genre);
-      setPendingGenreMatch(null);
-      setGenreIdx(i => i + 1);
-    }
-  }, [partnerGenreLikes, pendingGenreMatch]);
+    if (!sessionId) return;
+    // When partner likes a genre, check if we already liked it
+    partnerGenreLikes.forEach(gIdx => {
+      const myVotedThisGenre = myGenreLikes?.has(gIdx);
+      if (myVotedThisGenre) {
+        const genre = GENRES[gIdx];
+        if (genre) {
+          setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
+          setGenreMatch(g => g || genre);
+        }
+      }
+    });
+  }, [partnerGenreLikes]);
   
   // Check for movie match when partner likes update
   useEffect(() => {
@@ -360,26 +358,23 @@ export default function CineMatch() {
     const genre = GENRES[genreIdx];
     const gIdx = genreIdx;
 
+    await castVote(-(gIdx + 1), liked);
+
     if (liked) {
       setMyGenreLikes(prev => { const n = new Set(prev); n.add(gIdx); return n; });
-      await castVote(-(gIdx + 1), true);
-
       if (isSolo) {
-        // Solo mode: 50% chance partner likes it
         if (Math.random() > 0.5) {
-          setMatchedGenres(prev => [...prev, genre]);
+          setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
           setGenreMatch(genre);
+          setGenreIdx(i => i + 1);
           return;
         }
       } else if (partnerGenreLikes.has(gIdx)) {
-        setMatchedGenres(prev => [...prev, genre]);
+        setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
         setGenreMatch(genre);
+        setGenreIdx(i => i + 1);
         return;
-      } else {
-        setPendingGenreMatch({ gIdx, genre });
       }
-    } else {
-      await castVote(-(gIdx + 1), false);
     }
     setGenreIdx(i => i + 1);
   };
@@ -746,7 +741,7 @@ useEffect(() => {
           )}
         </div>
 
-        {genreMatch && <MatchModal item={genreMatch} type="genre" onClose={() => { setGenreMatch(null); setGenreIdx(i => i + 1); }} />}
+        {genreMatch && <MatchModal item={genreMatch} type="genre" onClose={() => { setGenreMatch(null); }} />}
         {movieMatch && <MatchModal item={movieMatch} type="movie" onClose={() => { setMovieMatch(null); setScreen("final"); }} />}
         {detail && <DetailPanel movie={detail} onClose={() => setDetail(null)} />}
       </div>
