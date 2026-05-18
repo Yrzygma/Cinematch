@@ -301,12 +301,16 @@ export default function CineMatch() {
     if (!pendingGenreMatch) return;
     const { gIdx, genre } = pendingGenreMatch;
     if (partnerGenreLikes.has(gIdx)) {
-      setMatchedGenres(prev => [...prev, genre]);
+      setMatchedGenres(prev => {
+        if (prev.find(g => g.id === genre.id)) return prev;
+        return [...prev, genre];
+      });
       setGenreMatch(genre);
       setPendingGenreMatch(null);
+      setGenreIdx(i => i + 1);
     }
   }, [partnerGenreLikes, pendingGenreMatch]);
-
+  
   // Check for movie match when partner likes update
   useEffect(() => {
     if (!cur) return;
