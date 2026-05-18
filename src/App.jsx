@@ -383,6 +383,7 @@ export default function CineMatch() {
   // ─── MOVIE SWIPE ──────────────────────────────────────────────────────────
   const onMovieSwipe = async (liked) => {
     const movie = movies[movieIdx];
+    const [myMovieLikes, setMyMovieLikes] = useState(new Set());
     await castVote(movie.id, liked);
 
     if (liked) {
@@ -391,15 +392,27 @@ export default function CineMatch() {
       } else if (partnerMovieLikes.has(movie.id)) {
         setMovieMatch(movie); return;
       }
-      // Register our like, wait for partner
-      setPartnerMovieLikes(prev => {
-        // We store our own likes too to detect future partner match
-        return prev;
-      });
+      
+      // Store our like so partner can match later
+      setMyMovieLikes(prev => { const n = new Set(prev); n.add(movie.id); return n; });
     }
     advance(movieIdx + 1);
   };
-
+  
+  useEffect(() => {
+    if (!partnerMovieLikes.size) return;
+    // Check if partner just liked a movie we already liked
+    for (const movieId of partnerMovieLikes) {
+      if (myMovieLikes.has(movieId)) {
+        const movie = movies.find(m => m.id === movieId);
+        if (movie && !movieMatch) {
+          setMovieMatch(movie);
+          return;
+        }
+      }
+    }
+  }, [partnerMovieLikes]);
+  
   // When partner likes a movie we already liked -> match
   useEffect(() => {
     if (!movies.length) return;
@@ -427,16 +440,39 @@ export default function CineMatch() {
     setLoading(true);
     setScreen("loading");
     try {
-      const movieList = await fetchMovies(g.id);
+      let movieList;
+      if (!isSolo) {
+        // Check if session already has a movie list
+        const { data } = await supabase
+          .from("sessions")
+          .select("movie_list")
+          .eq("id", sessionId)
+          .single();
+
+        if (data?.movie_list) {
+          // Use existing list (same order for both)
+          movieList = JSON.parse(data.movie_list);
+        } else {
+          // First to arrive generates the list and saves it
+          movieList = await fetchMovies(g.id);
+          await supabase.from("sessions").update({
+            movie_list: JSON.stringify(movieList),
+            genre_id: g.id,
+          }).eq("id", sessionId);
+        }
+      } else {
+        movieList = await fetchMovies(g.id);
+      }
       setMovies(movieList);
       setMovieIdx(0);
+      setMyMovieLikes(new Set());
       setScreen("movie");
     } catch {
       setScreen("genre");
     }
     setLoading(false);
   };
-
+  
   const copyLink = () => {
     const url = `${window.location.origin}?join=${sessionCode}`;
     navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
