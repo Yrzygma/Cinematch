@@ -464,13 +464,13 @@ export default function CineMatch() {
       if (data?.partner_name) {
         setPartnerName(data.partner_name);
         setPartnerConnected(true);
-        setScreen("genre");
+        setScreen(s => s === "waiting" ? "genre" : s);
         clearInterval(interval);
       }
     }, 2000);
     return () => clearInterval(interval);
   }, [sessionId, partnerConnected]);
-
+  
   const Btn = ({ onClick, children, outline, disabled }) => (
     <button onClick={onClick} disabled={disabled} style={{ background: outline ? "rgba(255,255,255,0.06)" : "#FF4D4D", color: outline ? "rgba(255,255,255,0.55)" : "white", border: outline ? "1px solid rgba(255,255,255,0.1)" : "none", borderRadius: 14, padding: "15px 24px", fontSize: 15, fontWeight: 600, cursor: disabled ? "default" : "pointer", width: "100%", fontFamily: "DM Sans, sans-serif", marginBottom: 10, opacity: disabled ? 0.4 : 1 }}>{children}</button>
   );
