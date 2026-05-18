@@ -218,6 +218,8 @@ export default function CineMatch() {
   const [partnerName, setPartnerName] = useState("");
   const [sessionCode, setSessionCode] = useState("");
   const [copied, setCopied] = useState(false);
+  const [myGenreLikes, setMyGenreLikes] = useState(new Set());
+  const [myMovieLikes, setMyMovieLikes] = useState(new Set());
 
   // Genre phase
   const [genreIdx, setGenreIdx] = useState(0);
