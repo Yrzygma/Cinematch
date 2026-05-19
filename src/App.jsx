@@ -218,14 +218,14 @@ export default function CineMatch() {
   const [partnerName, setPartnerName] = useState("");
   const [sessionCode, setSessionCode] = useState("");
   const [copied, setCopied] = useState(false);
-  const [myGenreLikes, setMyGenreLikes] = useState(new Set());
-  const [myMovieLikes, setMyMovieLikes] = useState(new Set());
 
   // Genre phase
   const [genreIdx, setGenreIdx] = useState(0);
+  const [myGenreLikes, setMyGenreLikes] = useState(new Set());
   const [partnerGenreLikes, setPartnerGenreLikes] = useState(new Set());
   const [matchedGenres, setMatchedGenres] = useState([]);
   const [genreMatch, setGenreMatch] = useState(null);
+  const [pendingGenreMatch, setPendingGenreMatch] = useState(null);
 
   // Movie phase
   const [selGenre, setSelGenre] = useState(null);
@@ -295,22 +295,18 @@ export default function CineMatch() {
 
     return () => supabase.removeChannel(channel);
   }, [sessionId, userId, myName]);
-  
+
+  // Check for genre match when partner likes update
   useEffect(() => {
-    if (!sessionId) return;
-    // When partner likes a genre, check if we already liked it
-    partnerGenreLikes.forEach(gIdx => {
-      const myVotedThisGenre = myGenreLikes?.has(gIdx);
-      if (myVotedThisGenre) {
-        const genre = GENRES[gIdx];
-        if (genre) {
-          setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
-          setGenreMatch(g => g || genre);
-        }
-      }
-    });
-  }, [partnerGenreLikes]);
-  
+    if (!pendingGenreMatch) return;
+    const { gIdx, genre } = pendingGenreMatch;
+    if (partnerGenreLikes.has(gIdx)) {
+      setMatchedGenres(prev => [...prev, genre]);
+      setGenreMatch(genre);
+      setPendingGenreMatch(null);
+    }
+  }, [partnerGenreLikes, pendingGenreMatch]);
+
   // Check for movie match when partner likes update
   useEffect(() => {
     if (!cur) return;
@@ -360,23 +356,26 @@ export default function CineMatch() {
     const genre = GENRES[genreIdx];
     const gIdx = genreIdx;
 
-    await castVote(-(gIdx + 1), liked);
-
     if (liked) {
       setMyGenreLikes(prev => { const n = new Set(prev); n.add(gIdx); return n; });
+      await castVote(-(gIdx + 1), true);
+
       if (isSolo) {
+        // Solo mode: 50% chance partner likes it
         if (Math.random() > 0.5) {
-          setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
+          setMatchedGenres(prev => [...prev, genre]);
           setGenreMatch(genre);
-          setGenreIdx(i => i + 1);
           return;
         }
       } else if (partnerGenreLikes.has(gIdx)) {
-        setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
+        setMatchedGenres(prev => [...prev, genre]);
         setGenreMatch(genre);
-        setGenreIdx(i => i + 1);
         return;
+      } else {
+        setPendingGenreMatch({ gIdx, genre });
       }
+    } else {
+      await castVote(-(gIdx + 1), false);
     }
     setGenreIdx(i => i + 1);
   };
@@ -384,7 +383,6 @@ export default function CineMatch() {
   // ─── MOVIE SWIPE ──────────────────────────────────────────────────────────
   const onMovieSwipe = async (liked) => {
     const movie = movies[movieIdx];
-    const [myMovieLikes, setMyMovieLikes] = useState(new Set());
     await castVote(movie.id, liked);
 
     if (liked) {
@@ -393,27 +391,15 @@ export default function CineMatch() {
       } else if (partnerMovieLikes.has(movie.id)) {
         setMovieMatch(movie); return;
       }
-      
-      // Store our like so partner can match later
-      setMyMovieLikes(prev => { const n = new Set(prev); n.add(movie.id); return n; });
+      // Register our like, wait for partner
+      setPartnerMovieLikes(prev => {
+        // We store our own likes too to detect future partner match
+        return prev;
+      });
     }
     advance(movieIdx + 1);
   };
-  
-  useEffect(() => {
-    if (!partnerMovieLikes.size) return;
-    // Check if partner just liked a movie we already liked
-    for (const movieId of partnerMovieLikes) {
-      if (myMovieLikes.has(movieId)) {
-        const movie = movies.find(m => m.id === movieId);
-        if (movie && !movieMatch) {
-          setMovieMatch(movie);
-          return;
-        }
-      }
-    }
-  }, [partnerMovieLikes]);
-  
+
   // When partner likes a movie we already liked -> match
   useEffect(() => {
     if (!movies.length) return;
@@ -441,32 +427,10 @@ export default function CineMatch() {
     setLoading(true);
     setScreen("loading");
     try {
-      let movieList;
-      if (!isSolo) {
-        // Check if session already has a movie list
-        const { data } = await supabase
-          .from("sessions")
-          .select("movie_list")
-          .eq("id", sessionId)
-          .single();
-
-        if (data?.movie_list) {
-          // Use existing list (same order for both)
-          movieList = JSON.parse(data.movie_list);
-        } else {
-          // First to arrive generates the list and saves it
-          movieList = await fetchMovies(g.id);
-          await supabase.from("sessions").update({
-            movie_list: JSON.stringify(movieList),
-            genre_id: g.id,
-          }).eq("id", sessionId);
-        }
-      } else {
-        movieList = await fetchMovies(g.id);
-      }
+      const movieList = await fetchMovies(g.id);
       setMovies(movieList);
       setMovieIdx(0);
-      setMyMovieLikes(new Set());
+      setMyMovieLikes(new Set()); // ← ajoutez cette ligne
       setScreen("movie");
     } catch {
       setScreen("genre");
@@ -494,27 +458,20 @@ export default function CineMatch() {
   }, []);
 
   // Watch for partner joining
-  // Watch for partner joining
-useEffect(() => {
-    if (!sessionId) return;
-    const channel = supabase
-      .channel(`waiting:${sessionId}`)
-      .on("postgres_changes", {
-        event: "UPDATE",
-        schema: "public",
-        table: "sessions",
-        filter: `id=eq.${sessionId}`,
-      }, (payload) => {
-        if (payload.new?.partner_name) {
-          setPartnerName(payload.new.partner_name);
-          setPartnerConnected(true);
-          setScreen("genre");
-        }
-      })
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [sessionId]);
-  
+  useEffect(() => {
+    if (!sessionId || partnerConnected) return;
+    const interval = setInterval(async () => {
+      const { data } = await supabase.from("sessions").select("*").eq("id", sessionId).single();
+      if (data?.partner_name) {
+        setPartnerName(data.partner_name);
+        setPartnerConnected(true);
+        setScreen("genre");
+        clearInterval(interval);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [sessionId, partnerConnected]);
+
   const Btn = ({ onClick, children, outline, disabled }) => (
     <button onClick={onClick} disabled={disabled} style={{ background: outline ? "rgba(255,255,255,0.06)" : "#FF4D4D", color: outline ? "rgba(255,255,255,0.55)" : "white", border: outline ? "1px solid rgba(255,255,255,0.1)" : "none", borderRadius: 14, padding: "15px 24px", fontSize: 15, fontWeight: 600, cursor: disabled ? "default" : "pointer", width: "100%", fontFamily: "DM Sans, sans-serif", marginBottom: 10, opacity: disabled ? 0.4 : 1 }}>{children}</button>
   );
@@ -743,7 +700,7 @@ useEffect(() => {
           )}
         </div>
 
-        {genreMatch && <MatchModal item={genreMatch} type="genre" onClose={() => { setGenreMatch(null); }} />}
+        {genreMatch && <MatchModal item={genreMatch} type="genre" onClose={() => { setGenreMatch(null); setGenreIdx(i => i + 1); }} />}
         {movieMatch && <MatchModal item={movieMatch} type="movie" onClose={() => { setMovieMatch(null); setScreen("final"); }} />}
         {detail && <DetailPanel movie={detail} onClose={() => setDetail(null)} />}
       </div>
