@@ -240,7 +240,7 @@ export default function CineMatch() {
   const [partnerMovieLikes, setPartnerMovieLikes] = useState(new Set());
 
   const genreDone = genreIdx >= GENRES.length;
-  const movieDone = movieIdx >= movies.length;
+  const movieDone = movies.length > 0 && movieIdx >= movies.length;
   const cur = movies[movieIdx];
   const isSolo = !sessionId;
 
@@ -411,10 +411,13 @@ useEffect(() => {
 
   // When partner likes a movie we already liked -> match
   useEffect(() => {
-    if (!movies.length) return;
-    const myLikedMovies = movies.slice(0, movieIdx).filter((_, i) => i < movieIdx);
-    // Check if any movie partner just liked, we also liked
-    // This is handled via the realtime callback above
+    if (!movies.length || screen !== "movie" || movieMatch) return;
+    for (const movieId of partnerMovieLikes) {
+      if (myMovieLikes.has(movieId)) {
+        const movie = movies.find(m => m.id === movieId);
+        if (movie) { setMovieMatch(movie); return; }
+      }
+    }
   }, [partnerMovieLikes]);
 
   const advance = (next) => {
