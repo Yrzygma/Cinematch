@@ -633,7 +633,7 @@ useEffect(() => {
           )}
 
           {/* GENRE DONE - pick */}
-          {screen === "genre" && genreDone && matchedGenres.length > 0 && (
+		 {screen === "genre" && !genreMatch && matchedGenres.length > 0 && (
             <div style={{ paddingTop: 20 }}>
               <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2.5, color: "rgba(255,75,75,0.65)", fontWeight: 700, marginBottom: 4 }}>🎉 Genres matches</div>
               <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 20, marginBottom: 4 }}><span style={{ color: "#FF4D4D" }}>{matchedGenres.length} genre{matchedGenres.length > 1 ? "s" : ""}</span> en commun</div>
