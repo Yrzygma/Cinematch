@@ -11,13 +11,15 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET");
 
-  const { genre, page = 1 } = req.query;
+  const { genre, page = 1, providers } = req.query;
   if (!genre || !GENRE_MAP[genre]) return res.status(400).json({ error: "Invalid genre" });
+
+  const providerParam = providers ? `&with_watch_providers=${providers}&watch_region=FR` : "";
 
   try {
     const pages = await Promise.all(
       [1, 2, 3].map((p) =>
-        fetch(`${TMDB_BASE}/discover/movie?api_key=${TMDB_KEY}&with_genres=${GENRE_MAP[genre]}&sort_by=popularity.desc&vote_count.gte=100&language=fr-FR&page=${Number(page) + p - 1}`)
+        fetch(`${TMDB_BASE}/discover/movie?api_key=${TMDB_KEY}&with_genres=${GENRE_MAP[genre]}&sort_by=popularity.desc&vote_count.gte=100&language=fr-FR${providerParam}&page=${Number(page) + p - 1}`)
           .then((r) => r.json())
       )
     );

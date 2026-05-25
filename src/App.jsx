@@ -21,6 +21,19 @@ const GENRES = [
   { id: "documentary", name: "Documentaire", emoji: "🎥", color: "#F97316", desc: "Le monde reel" },
 ];
 
+
+// ─── STREAMING PROVIDERS ──────────────────────────────────────────────────────
+const PROVIDERS = [
+  { id: 8,   name: "Netflix",      color: "#E50914", logo: "🔴" },
+  { id: 119, name: "Amazon Prime", color: "#00A8E0", logo: "🔵" },
+  { id: 337, name: "Disney+",      color: "#113CCF", logo: "⭐" },
+  { id: 350, name: "Apple TV+",    color: "#555555", logo: "🍎" },
+  { id: 190, name: "Canal+",       color: "#111111", logo: "⬛" },
+  { id: 56,  name: "OCS",          color: "#FF6B00", logo: "🟠" },
+  { id: 531, name: "Paramount+",   color: "#0064FF", logo: "💫" },
+  { id: 29,  name: "Free",         color: "#CD1127", logo: "📺" },
+];
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 function generateCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -30,9 +43,10 @@ function generateUserId() {
   return Math.random().toString(36).substring(2, 12);
 }
 
-async function fetchMovies(genreId) {
+async function fetchMovies(genreId, providers = []) {
   const page = Math.floor(Math.random() * 5) + 1;
-  const res = await fetch(`/api/movies?genre=${genreId}&page=${page}`);
+  const providerParam = providers.length > 0 ? `&providers=${providers.join(',')}` : '';
+  const res = await fetch(`/api/movies?genre=${genreId}&page=${page}${providerParam}`);
   const data = await res.json();
   return data.movies || [];
 }
@@ -220,6 +234,7 @@ export default function CineMatch() {
   const [partnerName, setPartnerName] = useState("");
   const [sessionCode, setSessionCode] = useState("");
   const [copied, setCopied] = useState(false);
+  const [selectedProviders, setSelectedProviders] = useState(() => JSON.parse(localStorage.getItem('selectedProviders') || '[]'));
 
   // Genre phase
   const [genreIdx, setGenreIdx] = useState(0);
@@ -629,9 +644,15 @@ useEffect(() => {
               <div style={{ height: 8 }} />
               <Btn outline onClick={() => { setScreen("genre"); }}>Mode solo</Btn>
               <div style={{ height: 4 }} />
-              <button onClick={() => setScreen("seen")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif", textDecoration: "underline" }}>
-                Mes films deja vus {seenIds.size > 0 ? `(${seenIds.size})` : ""}
-              </button>
+              <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 4 }}>
+                <button onClick={() => setScreen("providers")} style={{ background: "none", border: "none", color: selectedProviders.length > 0 ? "rgba(255,75,75,0.8)" : "rgba(255,255,255,0.3)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif", textDecoration: "underline" }}>
+                  🎬 Plateformes{selectedProviders.length > 0 ? ` (${selectedProviders.length})` : ""}
+                </button>
+                <span style={{ color: "rgba(255,255,255,0.15)" }}>·</span>
+                <button onClick={() => setScreen("seen")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif", textDecoration: "underline" }}>
+                  Deja vus{seenIds.size > 0 ? ` (${seenIds.size})` : ""}
+                </button>
+              </div>
             </div>
           )}
 
@@ -809,6 +830,42 @@ useEffect(() => {
               <div style={{ color: "rgba(255,255,255,0.33)", fontSize: 14, marginBottom: 28 }}>Essayez un autre genre !</div>
               <Btn onClick={() => setScreen("genre")}>Choisir un autre genre</Btn>
               <Btn outline onClick={() => startMovies(selGenre)}>Recharger ce genre</Btn>
+            </div>
+          )}
+
+          {/* PROVIDERS */}
+          {screen === "providers" && (
+            <div style={{ paddingTop: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 22 }}>Mes plateformes</div>
+                <button onClick={() => setScreen("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}>← Retour</button>
+              </div>
+              <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 13, marginBottom: 20, lineHeight: 1.6 }}>
+                Selectionnez vos plateformes pour ne voir que les films disponibles dessus. {selectedProviders.length === 0 && "Aucune selection = tous les films."}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+                {PROVIDERS.map(p => {
+                  const selected = selectedProviders.includes(p.id);
+                  return (
+                    <div key={p.id} onClick={() => {
+                      const next = selected ? selectedProviders.filter(id => id !== p.id) : [...selectedProviders, p.id];
+                      setSelectedProviders(next);
+                      localStorage.setItem('selectedProviders', JSON.stringify(next));
+                    }} style={{ borderRadius: 14, padding: "14px 16px", cursor: "pointer", border: selected ? `2px solid ${p.color}` : "1px solid rgba(255,255,255,0.1)", background: selected ? `${p.color}22` : "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", gap: 10, transition: "all 0.15s", userSelect: "none" }}>
+                      <div style={{ fontSize: 22 }}>{p.logo}</div>
+                      <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 13, color: selected ? "white" : "rgba(255,255,255,0.55)" }}>{p.name}</div>
+                      {selected && <div style={{ marginLeft: "auto", width: 18, height: 18, borderRadius: "50%", background: p.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "white", fontWeight: 700, flexShrink: 0 }}>✓</div>}
+                    </div>
+                  );
+                })}
+              </div>
+              {selectedProviders.length > 0 && (
+                <button onClick={() => { setSelectedProviders([]); localStorage.removeItem('selectedProviders'); }}
+                  style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif", textDecoration: "underline", width: "100%", textAlign: "center", marginBottom: 10 }}>
+                  Tout deselectionner
+                </button>
+              )}
+              <Btn onClick={() => setScreen("home")}>Valider ✓</Btn>
             </div>
           )}
 
