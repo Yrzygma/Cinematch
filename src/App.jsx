@@ -300,26 +300,34 @@ export default function CineMatch() {
     return () => supabase.removeChannel(channel);
   }, [sessionId, userId, myName]);
 
-// Show genre matches from queue one by one — only during genre phase
+// Show genre matches from queue one by one
   useEffect(() => {
-    if (!genreMatch && genreMatchQueue.length > 0 && screen === "genre") {
+    if (!genreMatch && genreMatchQueue.length > 0) {
       setGenreMatch(genreMatchQueue[0]);
       setGenreMatchQueue(prev => prev.slice(1));
     }
-  }, [genreMatch, genreMatchQueue, screen]);
+  }, [genreMatch, genreMatchQueue]);
 
 // Detect genre match when partner likes a genre we already liked
-useEffect(() => {
-  partnerGenreLikes.forEach(gIdx => {
-    if (myGenreLikes.has(gIdx)) {
-      const genre = GENRES[gIdx];
+// lastPartnerGenre tracks only the most recently added genre to avoid re-triggering
+  const lastPartnerGenreRef = useRef(-1);
+  useEffect(() => {
+    // Find the newest gIdx added by partner (highest value not yet processed)
+    let newGIdx = -1;
+    partnerGenreLikes.forEach(gIdx => {
+      if (gIdx > lastPartnerGenreRef.current) newGIdx = Math.max(newGIdx, gIdx);
+    });
+    if (newGIdx === -1) return;
+    lastPartnerGenreRef.current = newGIdx;
+
+    if (myGenreLikes.has(newGIdx)) {
+      const genre = GENRES[newGIdx];
       if (genre) {
         setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
         setGenreMatchQueue(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
       }
     }
-  });
-}, [partnerGenreLikes]);
+  }, [partnerGenreLikes]);
 
 
   // Check for genre match when partner likes update
@@ -474,8 +482,6 @@ useEffect(() => {
       setMovieIdx(0);
       setMyMovieLikes(new Set());
       setPartnerMovieLikes(new Set());
-      setGenreMatchQueue([]);
-      setGenreMatch(null);
       setScreen("movie");
     } catch(e) {
       console.error("startMovies error:", e);
@@ -494,7 +500,7 @@ useEffect(() => {
     setScreen("home"); setGenreIdx(0); setMatchedGenres([]); setMovies([]);
     setMovieMatch(null); setGenreMatch(null); setSessionId(null);
     setPartnerConnected(false); setMyGenreLikes(new Set()); setPartnerGenreLikes(new Set());
-    setPartnerMovieLikes(new Set()); setPendingGenreMatch(null); setGenreMatchQueue([]);
+    setPartnerMovieLikes(new Set()); setPendingGenreMatch(null); setGenreMatchQueue([]); lastPartnerGenreRef.current = -1;
   };
 
   // Auto-join from URL
