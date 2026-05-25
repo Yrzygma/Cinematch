@@ -324,10 +324,15 @@ useEffect(() => {
     }
   }, [partnerGenreLikes, pendingGenreMatch]);
 
-  // Check for movie match when partner likes update
+  // When partner likes a movie we already liked -> match
   useEffect(() => {
-    if (!cur) return;
-    // Only trigger if we already liked this movie
+    if (!movies.length || screen !== "movie" || movieMatch) return;
+    for (const movieId of partnerMovieLikes) {
+      if (myMovieLikes.has(movieId)) {
+        const movie = movies.find(m => m.id === movieId);
+        if (movie) { setMovieMatch(movie); return; }
+      }
+    }
   }, [partnerMovieLikes]);
 
   // ─── SESSION CREATION ─────────────────────────────────────────────────────
@@ -446,9 +451,7 @@ useEffect(() => {
       setMovies(movieList);
       setMovieIdx(0);
       setMyMovieLikes(new Set());
-      if (!isSolo) {
-        await supabase.from("sessions").update({ genre_id: g.id }).eq("id", sessionId);
-      }
+      setPartnerMovieLikes(new Set());
       setScreen("movie");
     } catch(e) {
   console.error("startMovies error:", e);
@@ -493,10 +496,7 @@ useEffect(() => {
 	    setPartnerConnected(true);
 	    setScreen("genre");
 	  }
-	  if (payload.new?.genre_id) {
-	    const genre = GENRES.find(g => g.id === payload.new.genre_id);
-	    if (genre) startMovies(genre);
-	  }
+
 	})
       .subscribe();
     return () => supabase.removeChannel(channel);
