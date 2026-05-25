@@ -208,6 +208,8 @@ function MatchModal({ item, type, onClose }) {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function CineMatch() {
+  const selGenreRef = useRef(null);
+
   // Session
   const [userId] = useState(() => localStorage.getItem("userId") || (() => { const id = generateUserId(); localStorage.setItem("userId", id); return id; })());
   const [sessionId, setSessionId] = useState(null);
@@ -440,35 +442,18 @@ useEffect(() => {
     setLoading(true);
     setScreen("loading");
     try {
-      let movieList;
-      if (!isSolo) {
-        const { data } = await supabase
-          .from("sessions")
-          .select("movie_list, genre_id")
-          .eq("id", sessionId)
-          .single();
-
-        if (data?.movie_list && data?.genre_id === g.id) {
-          movieList = JSON.parse(data.movie_list);
-        } else {
-          movieList = await fetchMovies(g.id);
-          await supabase.from("sessions").update({
-            genre_id: g.id,
-            movie_list: JSON.stringify(movieList),
-          }).eq("id", sessionId);
-        }
-      } else {
-        movieList = await fetchMovies(g.id);
-      }
+      const movieList = await fetchMovies(g.id);
       setMovies(movieList);
       setMovieIdx(0);
       setMyMovieLikes(new Set());
-      setPartnerMovieLikes(new Set());
+      if (!isSolo) {
+        await supabase.from("sessions").update({ genre_id: g.id }).eq("id", sessionId);
+      }
       setScreen("movie");
     } catch(e) {
-      console.error("startMovies error:", e);
-      setScreen("genre");
-    }
+  console.error("startMovies error:", e);
+  setScreen("genre");
+}
     setLoading(false);
   };
   
@@ -478,6 +463,7 @@ useEffect(() => {
   };
 
   const reset = () => {
+    selGenreRef.current = null;
     setScreen("home"); setGenreIdx(0); setMatchedGenres([]); setMovies([]);
     setMovieMatch(null); setGenreMatch(null); setSessionId(null);
     setPartnerConnected(false); setMyGenreLikes(new Set()); setPartnerGenreLikes(new Set());
