@@ -296,6 +296,20 @@ export default function CineMatch() {
     return () => supabase.removeChannel(channel);
   }, [sessionId, userId, myName]);
 
+// Detect genre match when partner likes a genre we already liked
+useEffect(() => {
+  partnerGenreLikes.forEach(gIdx => {
+    if (myGenreLikes.has(gIdx)) {
+      const genre = GENRES[gIdx];
+      if (genre) {
+        setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
+        setGenreMatch(prev => prev || genre);
+      }
+    }
+  });
+}, [partnerGenreLikes]);
+
+
   // Check for genre match when partner likes update
   useEffect(() => {
     if (!pendingGenreMatch) return;
