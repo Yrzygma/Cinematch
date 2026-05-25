@@ -300,13 +300,13 @@ export default function CineMatch() {
     return () => supabase.removeChannel(channel);
   }, [sessionId, userId, myName]);
 
-// Show genre matches from queue one by one
+// Show genre matches from queue one by one — only during genre phase
   useEffect(() => {
-    if (!genreMatch && genreMatchQueue.length > 0) {
+    if (!genreMatch && genreMatchQueue.length > 0 && screen === "genre") {
       setGenreMatch(genreMatchQueue[0]);
       setGenreMatchQueue(prev => prev.slice(1));
     }
-  }, [genreMatch, genreMatchQueue]);
+  }, [genreMatch, genreMatchQueue, screen]);
 
 // Detect genre match when partner likes a genre we already liked
 useEffect(() => {
@@ -474,6 +474,8 @@ useEffect(() => {
       setMovieIdx(0);
       setMyMovieLikes(new Set());
       setPartnerMovieLikes(new Set());
+      setGenreMatchQueue([]);
+      setGenreMatch(null);
       setScreen("movie");
     } catch(e) {
       console.error("startMovies error:", e);
