@@ -428,7 +428,10 @@ export default function CineMatch() {
       const movieList = await fetchMovies(g.id);
       setMovies(movieList);
       setMovieIdx(0);
-      setMyMovieLikes(new Set()); // ← ajoutez cette ligne
+      setMyMovieLikes(new Set());
+      if (!isSolo) {
+        await supabase.from("sessions").update({ genre_id: g.id }).eq("id", sessionId);
+      }
       setScreen("movie");
     } catch {
       setScreen("genre");
@@ -466,12 +469,16 @@ useEffect(() => {
         table: "sessions",
         filter: `id=eq.${sessionId}`,
       }, (payload) => {
-        if (payload.new?.partner_name) {
-          setPartnerName(payload.new.partner_name);
-          setPartnerConnected(true);
-          setScreen("genre");
-        }
-      })
+	  if (payload.new?.partner_name) {
+	    setPartnerName(payload.new.partner_name);
+	    setPartnerConnected(true);
+	    setScreen("genre");
+	  }
+	  if (payload.new?.genre_id) {
+	    const genre = GENRES.find(g => g.id === payload.new.genre_id);
+	    if (genre) startMovies(genre);
+	  }
+	})
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [sessionId]);
@@ -631,7 +638,7 @@ useEffect(() => {
           )}
 
           {/* GENRE DONE - pick */}
-		 {(screen === "genrePick" || (screen === "genre" && genreDone)) && matchedGenres.length > 0 && (
+		 {screen === "genre" && genreDone && !genreMatch && matchedGenres.length > 0 && (
             <div style={{ paddingTop: 20 }}>
               <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2.5, color: "rgba(255,75,75,0.65)", fontWeight: 700, marginBottom: 4 }}>🎉 Genres matches</div>
               <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 20, marginBottom: 4 }}><span style={{ color: "#FF4D4D" }}>{matchedGenres.length} genre{matchedGenres.length > 1 ? "s" : ""}</span> en commun</div>
@@ -707,7 +714,7 @@ useEffect(() => {
           )}
         </div>
 
-        {genreMatch && <MatchModal item={genreMatch} type="genre" onClose={() => { setGenreMatch(null); setScreen("genrePick"); }} />}
+        {genreMatch && <MatchModal item={genreMatch} type="genre" onClose={() => { setGenreMatch(null); }} />}
         {movieMatch && <MatchModal item={movieMatch} type="movie" onClose={() => { setMovieMatch(null); setScreen("final"); }} />}
         {detail && <DetailPanel movie={detail} onClose={() => setDetail(null)} />}
       </div>
