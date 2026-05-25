@@ -351,7 +351,6 @@ export default function CineMatch() {
     });
   };
 
-  // ─── GENRE SWIPE ──────────────────────────────────────────────────────────
   const onGenreSwipe = async (liked) => {
     const genre = GENRES[genreIdx];
     const gIdx = genreIdx;
@@ -361,18 +360,17 @@ export default function CineMatch() {
       await castVote(-(gIdx + 1), true);
 
       if (isSolo) {
-        // Solo mode: 50% chance partner likes it
         if (Math.random() > 0.5) {
-          setMatchedGenres(prev => [...prev, genre]);
+          setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
           setGenreMatch(genre);
+          setGenreIdx(i => i + 1);
           return;
         }
       } else if (partnerGenreLikes.has(gIdx)) {
-        setMatchedGenres(prev => [...prev, genre]);
+        setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
         setGenreMatch(genre);
+        setGenreIdx(i => i + 1);
         return;
-      } else {
-        setPendingGenreMatch({ gIdx, genre });
       }
     } else {
       await castVote(-(gIdx + 1), false);
@@ -633,7 +631,7 @@ useEffect(() => {
           )}
 
           {/* GENRE DONE - pick */}
-		 {screen === "genre" && !genreMatch && matchedGenres.length > 0 && (
+		 {(screen === "genrePick" || (screen === "genre" && genreDone)) && matchedGenres.length > 0 && (
             <div style={{ paddingTop: 20 }}>
               <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2.5, color: "rgba(255,75,75,0.65)", fontWeight: 700, marginBottom: 4 }}>🎉 Genres matches</div>
               <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 20, marginBottom: 4 }}><span style={{ color: "#FF4D4D" }}>{matchedGenres.length} genre{matchedGenres.length > 1 ? "s" : ""}</span> en commun</div>
@@ -645,6 +643,9 @@ useEffect(() => {
                     <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 13, color: g.color }}>{g.name}</div>
                   </div>
                 ))}
+                {screen !== "genrePick" && !genreDone && (
+  <Btn outline onClick={() => setScreen("genre")}>Continuer à swiper →</Btn>
+)}
               </div>
             </div>
           )}
@@ -706,7 +707,7 @@ useEffect(() => {
           )}
         </div>
 
-        {genreMatch && <MatchModal item={genreMatch} type="genre" onClose={() => { setGenreMatch(null); setGenreIdx(i => i + 1); }} />}
+        {genreMatch && <MatchModal item={genreMatch} type="genre" onClose={() => { setGenreMatch(null); setScreen("genrePick"); }} />}
         {movieMatch && <MatchModal item={movieMatch} type="movie" onClose={() => { setMovieMatch(null); setScreen("final"); }} />}
         {detail && <DetailPanel movie={detail} onClose={() => setDetail(null)} />}
       </div>
