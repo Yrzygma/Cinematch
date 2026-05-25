@@ -227,6 +227,7 @@ export default function CineMatch() {
   const [partnerGenreLikes, setPartnerGenreLikes] = useState(new Set());
   const [matchedGenres, setMatchedGenres] = useState([]);
   const [genreMatch, setGenreMatch] = useState(null);
+  const [genreMatchQueue, setGenreMatchQueue] = useState([]);
   const [pendingGenreMatch, setPendingGenreMatch] = useState(null);
 
   // Movie phase
@@ -235,7 +236,7 @@ export default function CineMatch() {
   const [movieIdx, setMovieIdx] = useState(0);
   const [movieMatch, setMovieMatch] = useState(null);
   const [detail, setDetail] = useState(null);
-  const [seenIds, setSeenIds] = useState(() => new Set(JSON.parse(localStorage.getItem("seenIds") || "[]")));
+  const [seenIds, setSeenIds] = useState(() => new Set((JSON.parse(localStorage.getItem("seenIds") || "[]")).map(Number)));
   const [skipSeen, setSkipSeen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [myMovieLikes, setMyMovieLikes] = useState(new Set());
@@ -299,6 +300,14 @@ export default function CineMatch() {
     return () => supabase.removeChannel(channel);
   }, [sessionId, userId, myName]);
 
+// Show genre matches from queue one by one
+  useEffect(() => {
+    if (!genreMatch && genreMatchQueue.length > 0) {
+      setGenreMatch(genreMatchQueue[0]);
+      setGenreMatchQueue(prev => prev.slice(1));
+    }
+  }, [genreMatch, genreMatchQueue]);
+
 // Detect genre match when partner likes a genre we already liked
 useEffect(() => {
   partnerGenreLikes.forEach(gIdx => {
@@ -306,7 +315,7 @@ useEffect(() => {
       const genre = GENRES[gIdx];
       if (genre) {
         setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
-        setGenreMatch(prev => prev || genre);
+        setGenreMatchQueue(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
       }
     }
   });
@@ -379,13 +388,13 @@ useEffect(() => {
       if (isSolo) {
         if (Math.random() > 0.5) {
           setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
-          setGenreMatch(genre);
+          setGenreMatchQueue(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
           setGenreIdx(i => i + 1);
           return;
         }
       } else if (partnerGenreLikes.has(gIdx)) {
         setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
-        setGenreMatch(genre);
+        setGenreMatchQueue(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
         setGenreIdx(i => i + 1);
         return;
       }
@@ -431,7 +440,7 @@ useEffect(() => {
     setSeenIds(prev => {
       const n = new Set(prev);
       n.has(id) ? n.delete(id) : n.add(id);
-      localStorage.setItem("seenIds", JSON.stringify([...n]));
+      localStorage.setItem("seenIds", JSON.stringify([...n].map(Number)));
       return n;
     });
   };
@@ -483,7 +492,7 @@ useEffect(() => {
     setScreen("home"); setGenreIdx(0); setMatchedGenres([]); setMovies([]);
     setMovieMatch(null); setGenreMatch(null); setSessionId(null);
     setPartnerConnected(false); setMyGenreLikes(new Set()); setPartnerGenreLikes(new Set());
-    setPartnerMovieLikes(new Set()); setPendingGenreMatch(null);
+    setPartnerMovieLikes(new Set()); setPendingGenreMatch(null); setGenreMatchQueue([]);
   };
 
   // Auto-join from URL
