@@ -442,9 +442,17 @@ export default function CineMatch() {
     }
   }, [partnerMovieLikes]);
 
-  const advance = (next) => {
-    if (skipSeen) { let i = next; while (i < movies.length && seenIds.has(movies[i].id)) i++; setMovieIdx(i); }
-    else setMovieIdx(next);
+  const advance = (next, movieList, skip, seen) => {
+    const list = movieList || movies;
+    const doSkip = skip !== undefined ? skip : skipSeen;
+    const seenSet = seen || seenIds;
+    if (doSkip) {
+      let i = next;
+      while (i < list.length && seenSet.has(list[i].id)) i++;
+      setMovieIdx(i);
+    } else {
+      setMovieIdx(next);
+    }
   };
 
   const toggleSeen = (id) => {
@@ -515,7 +523,12 @@ export default function CineMatch() {
         movieList = await fetchMovies(g.id);
       }
       setMovies(movieList);
-      setMovieIdx(0);
+      // Start at first non-seen movie if skipSeen is on
+      let startIdx = 0;
+      if (skipSeen) {
+        while (startIdx < movieList.length && seenIds.has(movieList[startIdx].id)) startIdx++;
+      }
+      setMovieIdx(startIdx);
       setMyMovieLikes(new Set());
       setPartnerMovieLikes(new Set());
       setScreen("movie");
@@ -764,7 +777,11 @@ useEffect(() => {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, padding: "8px 14px" }}>
                   <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>Passer les deja vus {seenIds.size > 0 ? `(${seenIds.size})` : ""}</span>
-                  <div onClick={() => setSkipSeen(v => !v)} style={{ width: 38, height: 20, borderRadius: 10, background: skipSeen ? "#FF4D4D" : "rgba(255,255,255,0.1)", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                  <div onClick={() => {
+                    const next = !skipSeen;
+                    setSkipSeen(next);
+                    if (next && cur && seenIds.has(cur.id)) advance(movieIdx, movies, next, seenIds);
+                  }} style={{ width: 38, height: 20, borderRadius: 10, background: skipSeen ? "#FF4D4D" : "rgba(255,255,255,0.1)", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
                     <div style={{ position: "absolute", top: 2, left: skipSeen ? 20 : 2, width: 16, height: 16, borderRadius: "50%", background: "white", transition: "left 0.2s" }} />
                   </div>
                 </div>
