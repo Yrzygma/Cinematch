@@ -7,9 +7,6 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFsam1meWtoa2hhYnpneGV1dHltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMjQxNjQsImV4cCI6MjA5NDcwMDE2NH0._O8bxcAcU9voDu0SB6cLGgXOgIa3joZMsGeiwj_kFvs"
 );
 
-// ─── GENRE REF (to avoid stale closure in useEffect) ─────────────────────────
-const selGenreRef = { current: null };
-
 // ─── GENRES ───────────────────────────────────────────────────────────────────
 const GENRES = [
   { id: "action",      name: "Action",       emoji: "💥", color: "#FF4D4D", desc: "Adrenaline & explosions" },
@@ -438,7 +435,6 @@ useEffect(() => {
   };
 
   const startMovies = async (g) => {
-    selGenreRef.current = g;
     setSelGenre(g);
     setLoading(true);
     setScreen("loading");
@@ -447,10 +443,6 @@ useEffect(() => {
       setMovies(movieList);
       setMovieIdx(0);
       setMyMovieLikes(new Set());
-      setPartnerMovieLikes(new Set());
-      if (!isSolo) {
-        await supabase.from("sessions").update({ genre_id: g.id }).eq("id", sessionId);
-      }
       setScreen("movie");
     } catch(e) {
   console.error("startMovies error:", e);
@@ -465,7 +457,6 @@ useEffect(() => {
   };
 
   const reset = () => {
-    selGenreRef.current = null;
     setScreen("home"); setGenreIdx(0); setMatchedGenres([]); setMovies([]);
     setMovieMatch(null); setGenreMatch(null); setSessionId(null);
     setPartnerConnected(false); setMyGenreLikes(new Set()); setPartnerGenreLikes(new Set());
@@ -495,10 +486,7 @@ useEffect(() => {
 	    setPartnerConnected(true);
 	    setScreen("genre");
 	  }
-	  if (payload.new?.genre_id && !selGenreRef.current) {
-	    const genre = GENRES.find(g => g.id === payload.new.genre_id);
-	    if (genre) startMovies(genre);
-	  }
+
 	})
       .subscribe();
     return () => supabase.removeChannel(channel);
