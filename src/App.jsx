@@ -236,7 +236,10 @@ export default function CineMatch() {
   const [movieIdx, setMovieIdx] = useState(0);
   const [movieMatch, setMovieMatch] = useState(null);
   const [detail, setDetail] = useState(null);
-  const [seenIds, setSeenIds] = useState(() => new Set((JSON.parse(localStorage.getItem("seenIds") || "[]")).map(Number)));
+  const seenKey = `seenIds_${userId}`;
+  const seenMoviesKey = `seenMovies_${userId}`;
+  const [seenIds, setSeenIds] = useState(() => new Set((JSON.parse(localStorage.getItem(`seenIds_${localStorage.getItem('userId') || 'guest'}`) || "[]")).map(Number)));
+  const [seenMovies, setSeenMovies] = useState(() => JSON.parse(localStorage.getItem(`seenMovies_${localStorage.getItem('userId') || 'guest'}`) || "[]"));
   const [skipSeen, setSkipSeen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [myMovieLikes, setMyMovieLikes] = useState(new Set());
@@ -445,11 +448,44 @@ export default function CineMatch() {
   };
 
   const toggleSeen = (id) => {
+    const movie = movies.find(m => m.id === id);
     setSeenIds(prev => {
       const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
-      localStorage.setItem("seenIds", JSON.stringify([...n].map(Number)));
+      if (n.has(id)) {
+        n.delete(id);
+        setSeenMovies(prev2 => {
+          const updated = prev2.filter(m => m.id !== id);
+          localStorage.setItem(seenMoviesKey, JSON.stringify(updated));
+          return updated;
+        });
+      } else {
+        n.add(id);
+        if (movie) {
+          setSeenMovies(prev2 => {
+            if (prev2.find(m => m.id === id)) return prev2;
+            const updated = [...prev2, { id: movie.id, title: movie.title, poster: movie.poster, year: movie.year, imdb: movie.imdb }];
+            localStorage.setItem(seenMoviesKey, JSON.stringify(updated));
+            return updated;
+          });
+        }
+      }
+      localStorage.setItem(seenKey, JSON.stringify([...n].map(Number)));
       return n;
+    });
+  };
+
+  const removeSeen = (id) => {
+    const numId = Number(id);
+    setSeenIds(prev => {
+      const n = new Set(prev);
+      n.delete(numId);
+      localStorage.setItem(seenKey, JSON.stringify([...n].map(Number)));
+      return n;
+    });
+    setSeenMovies(prev => {
+      const updated = prev.filter(m => m.id !== numId);
+      localStorage.setItem(seenMoviesKey, JSON.stringify(updated));
+      return updated;
     });
   };
 
@@ -579,6 +615,10 @@ useEffect(() => {
               <Btn outline onClick={() => setScreen("join")}>Rejoindre une session</Btn>
               <div style={{ height: 8 }} />
               <Btn outline onClick={() => { setScreen("genre"); }}>Mode solo</Btn>
+              <div style={{ height: 4 }} />
+              <button onClick={() => setScreen("seen")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif", textDecoration: "underline" }}>
+                Mes films deja vus {seenIds.size > 0 ? `(${seenIds.size})` : ""}
+              </button>
             </div>
           )}
 
@@ -752,6 +792,48 @@ useEffect(() => {
               <div style={{ color: "rgba(255,255,255,0.33)", fontSize: 14, marginBottom: 28 }}>Essayez un autre genre !</div>
               <Btn onClick={() => setScreen("genre")}>Choisir un autre genre</Btn>
               <Btn outline onClick={() => startMovies(selGenre)}>Recharger ce genre</Btn>
+            </div>
+          )}
+
+          {/* SEEN MOVIES */}
+          {screen === "seen" && (
+            <div style={{ paddingTop: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 22 }}>Mes films deja vus</div>
+                <button onClick={() => setScreen("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}>← Retour</button>
+              </div>
+              {seenIds.size === 0 ? (
+                <div style={{ textAlign: "center", paddingTop: 40, color: "rgba(255,255,255,0.3)", fontSize: 15 }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>🎬</div>
+                  Aucun film marque comme deja vu
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
+                    {seenIds.size} film{seenIds.size > 1 ? "s" : ""} — ces films seront exclus si vous activez "Passer les deja vus"
+                  </div>
+                  {seenMovies.length > 0 ? seenMovies.map(m => (
+                    <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "10px 14px" }}>
+                      <div style={{ width: 40, height: 56, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+                        <Poster url={m.poster} title={m.title} style={{ width: "100%", height: "100%" }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</div>
+                        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{m.year}{m.imdb ? ` · ⭐ ${m.imdb}` : ""}</div>
+                      </div>
+                      <button onClick={() => removeSeen(m.id)} style={{ background: "rgba(255,77,77,0.1)", border: "1px solid rgba(255,77,77,0.3)", borderRadius: 8, padding: "6px 10px", color: "#FF4D4D", fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif", flexShrink: 0 }}>✕</button>
+                    </div>
+                  )) : [...seenIds].map(id => (
+                    <div key={id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "12px 16px" }}>
+                      <div style={{ fontSize: 14, color: "rgba(255,255,255,0.6)" }}>Film #{id}</div>
+                      <button onClick={() => removeSeen(id)} style={{ background: "rgba(255,77,77,0.1)", border: "1px solid rgba(255,77,77,0.3)", borderRadius: 8, padding: "5px 12px", color: "#FF4D4D", fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}>✕</button>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 10 }}>
+                    <Btn outline onClick={() => { setSeenIds(new Set()); setSeenMovies([]); localStorage.removeItem(seenKey); localStorage.removeItem(seenMoviesKey); }}>Tout effacer</Btn>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
