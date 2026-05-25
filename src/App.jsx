@@ -236,6 +236,7 @@ export default function CineMatch() {
   const [seenIds, setSeenIds] = useState(() => new Set(JSON.parse(localStorage.getItem("seenIds") || "[]")));
   const [skipSeen, setSkipSeen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [myMovieLikes, setMyMovieLikes] = useState(new Set());
   const [partnerMovieLikes, setPartnerMovieLikes] = useState(new Set());
 
   const genreDone = genreIdx >= GENRES.length;
