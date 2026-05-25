@@ -159,7 +159,16 @@ function MovieCard({ movie, onSwipe, onDetail, seenIds, onToggleSeen }) {
             + Info
           </button>
         </div>
-        <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 12.5, lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{movie.synopsis}</div>
+        <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 12.5, lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginBottom: movie.streamingOn?.length > 0 ? 8 : 0 }}>{movie.synopsis}</div>
+        {movie.streamingOn?.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {movie.streamingOn.map(p => (
+              <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, padding: "3px 8px", fontSize: 11, color: "rgba(255,255,255,0.55)" }}>
+                {p.logo} {p.name}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       {ind && <Ind type={ind} />}
     </div>
@@ -182,6 +191,18 @@ function DetailPanel({ movie, onClose }) {
         </div>
       </div>
       <div style={{ padding: "20px 22px 48px" }}>
+        {movie.streamingOn?.length > 0 && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2.5, color: "rgba(255,75,75,0.65)", fontWeight: 700, marginBottom: 10 }}>Disponible sur</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {movie.streamingOn.map(p => (
+                <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "6px 12px", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>
+                  {p.logo} {p.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 15, lineHeight: 1.75 }}>{movie.synopsis}</p>
       </div>
     </div>
