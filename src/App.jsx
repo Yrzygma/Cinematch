@@ -458,20 +458,26 @@ export default function CineMatch() {
   }, []);
 
   // Watch for partner joining
-  useEffect(() => {
-    if (!sessionId || partnerConnected) return;
-    const interval = setInterval(async () => {
-      const { data } = await supabase.from("sessions").select("*").eq("id", sessionId).single();
-      if (data?.partner_name) {
-        setPartnerName(data.partner_name);
-        setPartnerConnected(true);
-        setScreen("genre");
-        clearInterval(interval);
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [sessionId, partnerConnected]);
-
+useEffect(() => {
+    if (!sessionId) return;
+    const channel = supabase
+      .channel(`waiting:${sessionId}`)
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "sessions",
+        filter: `id=eq.${sessionId}`,
+      }, (payload) => {
+        if (payload.new?.partner_name) {
+          setPartnerName(payload.new.partner_name);
+          setPartnerConnected(true);
+          setScreen("genre");
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [sessionId]);
+  
   const Btn = ({ onClick, children, outline, disabled }) => (
     <button onClick={onClick} disabled={disabled} style={{ background: outline ? "rgba(255,255,255,0.06)" : "#FF4D4D", color: outline ? "rgba(255,255,255,0.55)" : "white", border: outline ? "1px solid rgba(255,255,255,0.1)" : "none", borderRadius: 14, padding: "15px 24px", fontSize: 15, fontWeight: 600, cursor: disabled ? "default" : "pointer", width: "100%", fontFamily: "DM Sans, sans-serif", marginBottom: 10, opacity: disabled ? 0.4 : 1 }}>{children}</button>
   );
