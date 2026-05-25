@@ -447,9 +447,10 @@ useEffect(() => {
         await supabase.from("sessions").update({ genre_id: g.id }).eq("id", sessionId);
       }
       setScreen("movie");
-    } catch {
-      setScreen("genre");
-    }
+    } catch(e) {
+  console.error("startMovies error:", e);
+  setScreen("genre");
+}
     setLoading(false);
   };
   
