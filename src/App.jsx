@@ -399,16 +399,12 @@ useEffect(() => {
     await castVote(movie.id, liked);
 
     if (liked) {
+      setMyMovieLikes(prev => { const n = new Set(prev); n.add(movie.id); return n; });
       if (isSolo) {
         if (Math.random() > 0.6) { setMovieMatch(movie); return; }
       } else if (partnerMovieLikes.has(movie.id)) {
         setMovieMatch(movie); return;
       }
-      // Register our like, wait for partner
-      setPartnerMovieLikes(prev => {
-        // We store our own likes too to detect future partner match
-        return prev;
-      });
     }
     advance(movieIdx + 1);
   };
