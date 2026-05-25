@@ -435,19 +435,40 @@ useEffect(() => {
   };
 
   const startMovies = async (g) => {
+    selGenreRef.current = g;
     setSelGenre(g);
     setLoading(true);
     setScreen("loading");
     try {
-      const movieList = await fetchMovies(g.id);
+      let movieList;
+      if (!isSolo) {
+        const { data } = await supabase
+          .from("sessions")
+          .select("movie_list, genre_id")
+          .eq("id", sessionId)
+          .single();
+
+        if (data?.movie_list && data?.genre_id === g.id) {
+          movieList = JSON.parse(data.movie_list);
+        } else {
+          movieList = await fetchMovies(g.id);
+          await supabase.from("sessions").update({
+            genre_id: g.id,
+            movie_list: JSON.stringify(movieList),
+          }).eq("id", sessionId);
+        }
+      } else {
+        movieList = await fetchMovies(g.id);
+      }
       setMovies(movieList);
       setMovieIdx(0);
       setMyMovieLikes(new Set());
+      setPartnerMovieLikes(new Set());
       setScreen("movie");
     } catch(e) {
-  console.error("startMovies error:", e);
-  setScreen("genre");
-}
+      console.error("startMovies error:", e);
+      setScreen("genre");
+    }
     setLoading(false);
   };
   
@@ -486,7 +507,10 @@ useEffect(() => {
 	    setPartnerConnected(true);
 	    setScreen("genre");
 	  }
-
+	  if (payload.new?.genre_id) {
+	    const genre = GENRES.find(g => g.id === payload.new.genre_id);
+	    if (genre) startMovies(genre);
+	  }
 	})
       .subscribe();
     return () => supabase.removeChannel(channel);
