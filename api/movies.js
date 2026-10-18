@@ -1,4 +1,5 @@
-const TMDB_KEY = "c61d7d8e6e2a2a3a64aa7a0390814eb2";
+// Cle TMDB lue depuis les variables d'environnement Vercel (jamais dans le code)
+const TMDB_KEY = process.env.TMDB_KEY;
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
 const GENRE_MAP = {
@@ -73,6 +74,10 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET");
 
   const { genre, providers, mood, list } = req.query;
+
+  if (!TMDB_KEY) {
+    return res.status(500).json({ error: "TMDB_KEY manquante dans les variables d'environnement Vercel" });
+  }
 
   // ── Mode : liste des plateformes avec les logos officiels TMDB ──
   if (list === "providers") {

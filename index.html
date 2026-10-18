@@ -2,11 +2,41 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CineMatch</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>CinéMatch — Trouvez votre film ce soir</title>
+    <meta name="description" content="Swipez à deux, matchez sur le même film. Gratuit, sans inscription." />
+    <meta name="theme-color" content="#0A0A0B" />
+
+    <!-- Appli installable -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="CinéMatch" />
+
+    <!-- Apercu de lien (WhatsApp, SMS, Messenger, reseaux sociaux) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="CinéMatch" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:url" content="https://cinematch-tau-eight.vercel.app/" />
+    <meta property="og:title" content="CinéMatch — Trouvez votre film ce soir" />
+    <meta property="og:description" content="Swipez à deux, matchez sur le même film. Gratuit, sans inscription." />
+    <meta property="og:image" content="https://cinematch-tau-eight.vercel.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="CinéMatch — Trouvez votre film ce soir." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="CinéMatch — Trouvez votre film ce soir" />
+    <meta name="twitter:description" content="Swipez à deux, matchez sur le même film. Gratuit, sans inscription." />
+    <meta name="twitter:image" content="https://cinematch-tau-eight.vercel.app/og-image.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { background: #0A0A0F; }
+      body { background: #0A0A0B; }
     </style>
   </head>
   <body>

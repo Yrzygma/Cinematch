@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { initAnalytics, track } from "./analytics.js";
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const supabase = createClient(
@@ -58,16 +59,16 @@ function Icon({ name, color = T.accent, size = 36, fill = false }) {
 
 // ─── GENRES ───────────────────────────────────────────────────────────────────
 const GENRES = [
-  { id: "action",      name: "Action",       icon: "action",      color: "#D4AF37", desc: "Adrenaline & explosions" },
-  { id: "comedy",      name: "Comedie",      icon: "comedy",      color: "#D4AF37", desc: "Rires garantis" },
+  { id: "action",      name: "Action",       icon: "action",      color: "#D4AF37", desc: "Adrénaline & explosions" },
+  { id: "comedy",      name: "Comédie",      icon: "comedy",      color: "#D4AF37", desc: "Rires garantis" },
   { id: "thriller",    name: "Thriller",     icon: "thriller",    color: "#D4AF37", desc: "Suspense & tension" },
   { id: "scifi",       name: "Sci-Fi",       icon: "scifi",       color: "#D4AF37", desc: "Futur & univers" },
   { id: "horror",      name: "Horreur",      icon: "horror",      color: "#D4AF37", desc: "Frissons & terreur" },
-  { id: "drama",       name: "Drame",        icon: "drama",       color: "#D4AF37", desc: "Emotions profondes" },
+  { id: "drama",       name: "Drame",        icon: "drama",       color: "#D4AF37", desc: "Émotions profondes" },
   { id: "romance",     name: "Romance",      icon: "romance",     color: "#D4AF37", desc: "Feel-good & amour" },
   { id: "animation",   name: "Animation",    icon: "animation",   color: "#D4AF37", desc: "Tous publics" },
-  { id: "adventure",   name: "Aventure",     icon: "adventure",   color: "#D4AF37", desc: "Exploration & epopee" },
-  { id: "documentary", name: "Documentaire", icon: "documentary", color: "#D4AF37", desc: "Le monde reel" },
+  { id: "adventure",   name: "Aventure",     icon: "adventure",   color: "#D4AF37", desc: "Exploration & épopée" },
+  { id: "documentary", name: "Documentaire", icon: "documentary", color: "#D4AF37", desc: "Le monde réel" },
 ];
 
 
@@ -84,9 +85,9 @@ const PROVIDERS = [
 // ─── MOOD : criteres de recherche ─────────────────────────────────────────────
 const COUNTRIES = [
   { code: "FR", name: "France" },
-  { code: "US", name: "Etats-Unis" },
+  { code: "US", name: "États-Unis" },
   { code: "GB", name: "Royaume-Uni" },
-  { code: "KR", name: "Coree du Sud" },
+  { code: "KR", name: "Corée du Sud" },
   { code: "JP", name: "Japon" },
   { code: "IT", name: "Italie" },
   { code: "ES", name: "Espagne" },
@@ -124,6 +125,17 @@ function isMoodActive(m) {
 
 // ─── MOOD FILTERS ─────────────────────────────────────────────────────────────
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
+const APP_URL = "https://cinematch-tau-eight.vercel.app";
+
+// Les erreurs reseau (Supabase en pause, connexion coupee) ne renvoient pas de code
+// Postgres : on les distingue d'un simple "code introuvable".
+function isNetworkError(error) {
+  if (!error) return false;
+  if (error.code === "PGRST116") return false; // aucune ligne : code introuvable
+  const msg = String(error.message || error).toLowerCase();
+  return !error.code || msg.includes("fetch") || msg.includes("network");
+}
+
 function generateCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
@@ -233,7 +245,7 @@ function RatingBadge({ score }) {
   if (!score) return null;
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(245,197,24,0.14)", border: "1px solid rgba(245,197,24,0.4)", borderRadius: 7, padding: "3px 8px", fontSize: 11, fontWeight: 700, color: "#F5C518" }}>
-      ⭐ {score}/10
+      <Icon name="star" size={11} color="#F5C518" /> {score}/10
     </span>
   );
 }
@@ -241,7 +253,7 @@ function RatingBadge({ score }) {
 function Ind({ type }) {
   return (
     <div style={{ position: "absolute", top: 20, right: type === "like" ? 18 : "auto", left: type === "nope" ? 18 : "auto", background: type === "like" ? T.accentSoft : "rgba(217,83,79,0.16)", border: `2.5px solid ${type === "like" ? T.accent : T.red}`, borderRadius: 10, padding: "5px 14px", color: type === "like" ? T.accent : T.red, fontFamily: T.display, fontWeight: 700, fontSize: 18, letterSpacing: 1, transform: type === "like" ? "rotate(8deg)" : "rotate(-8deg)", pointerEvents: "none" }}>
-      {type === "like" ? "MATCH!" : "NOPE"}
+      {type === "like" ? "MATCH" : "NON"}
     </div>
   );
 }
@@ -303,9 +315,10 @@ function GenreCard({ genre, onSwipe }) {
   );
 }
 
-function MovieCard({ movie, onSwipe, onDetail, seenIds, onToggleSeen }) {
+function MovieCard({ movie, onSwipe, onDetail, seenIds, onToggleSeen, wishlist = [], onToggleWishlist }) {
   const { tx, out, ind, onStart, onMove, onEnd } = useSwipe(onSwipe);
   const isSeen = seenIds.has(movie.id);
+  const inList = wishlist.some(m => m.id === movie.id);
   return (
     <div style={{ transform: tx, transition: out ? "transform 0.3s ease" : "none", pointerEvents: out ? "none" : "auto", position: "absolute", inset: 0, borderRadius: 22, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)", background: "#13131A", boxShadow: "0 28px 64px rgba(0,0,0,0.65)", touchAction: "none", cursor: "grab", userSelect: "none" }}
       onMouseDown={e => onStart(e.clientX)} onMouseMove={e => onMove(e.clientX, 0.055)} onMouseUp={onEnd} onMouseLeave={onEnd}
@@ -317,8 +330,19 @@ function MovieCard({ movie, onSwipe, onDetail, seenIds, onToggleSeen }) {
         <button onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
           onClick={e => { e.stopPropagation(); onToggleSeen(movie.id); }}
           style={{ position: "absolute", top: 12, right: 12, background: isSeen ? "rgba(250,200,50,0.22)" : "rgba(0,0,0,0.55)", border: isSeen ? "1.5px solid rgba(250,200,50,0.65)" : "1px solid rgba(255,255,255,0.22)", borderRadius: 20, padding: "5px 12px", fontSize: 11, fontWeight: 700, color: isSeen ? "#FAC832" : "rgba(255,255,255,0.5)", cursor: "pointer", backdropFilter: "blur(8px)" }}>
-          {isSeen ? "✓ Deja vu" : "Deja vu ?"}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            {isSeen && <Icon name="check" size={11} color="#FAC832" />}
+            {isSeen ? "Déjà vu" : "Déjà vu ?"}
+          </span>
         </button>
+        {onToggleWishlist && (
+          <button onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); onToggleWishlist(movie); }}
+            aria-label={inList ? "Retirer de ma liste" : "Ajouter à ma liste"}
+            style={{ position: "absolute", top: 10, left: 12, width: 34, height: 34, borderRadius: "50%", background: inList ? "rgba(212,175,55,0.22)" : "rgba(0,0,0,0.55)", border: inList ? `1.5px solid ${T.accent}` : "1px solid rgba(255,255,255,0.22)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(8px)" }}>
+            <Icon name="bookmark" size={15} color={inList ? T.accent : "rgba(255,255,255,0.75)"} fill={inList} />
+          </button>
+        )}
         <div style={{ position: "absolute", bottom: 10, left: 12 }}>
           <RatingBadge score={movie.imdb} />
         </div>
@@ -358,7 +382,7 @@ function DetailPanel({ movie, onClose }) {
       <div style={{ position: "relative", height: 320, overflow: "hidden" }}>
         <Poster url={movie.backdrop || movie.poster} title={movie.title} style={{ position: "absolute", inset: 0, filter: "brightness(0.5)" }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom,rgba(0,0,0,0.1) 30%,#0A0A0B 100%)" }} />
-        <button onClick={onClose} style={{ position: "absolute", top: 20, left: 20, background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 50, width: 40, height: 40, color: "#fff", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)" }}>←</button>
+        <button onClick={onClose} style={{ position: "absolute", top: 20, left: 20, background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 50, width: 40, height: 40, color: "#fff", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)" }} aria-label="Retour"><Icon name="back" size={20} color="#fff" /></button>
         <div style={{ position: "absolute", bottom: 20, left: 20, right: 20 }}>
           <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 24, lineHeight: 1.15, marginBottom: 10 }}>{movie.title}</div>
           <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
@@ -384,7 +408,7 @@ function DetailPanel({ movie, onClose }) {
         {movie.trailerKey && (
           <a href={`https://www.youtube.com/watch?v=${movie.trailerKey}`} target="_blank" rel="noopener noreferrer"
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, width: "100%", background: T.accentSoft, border: `1px solid ${T.border}`, borderRadius: 14, padding: "13px 20px", color: T.accent, fontWeight: 700, fontSize: 14, textDecoration: "none", marginBottom: 18 }}>
-            ▶ Voir la bande-annonce
+            <Icon name="play" size={16} color={T.accent} /> Voir la bande-annonce
           </a>
         )}
         <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 15, lineHeight: 1.75 }}>{movie.synopsis}</p>
@@ -418,7 +442,7 @@ function MatchModal({ item, type, onClose }) {
           </>
         )}
         <button onClick={onClose} style={{ background: T.btnGrad, color: T.accentDark, border: "none", borderRadius: 14, padding: "15px 24px", fontSize: 16, fontWeight: 700, cursor: "pointer", width: "100%", fontFamily: T.body, marginBottom: type === "movie" ? 10 : 0 }}>
-          {type === "genre" ? "Continuer →" : "🍿 C'est parti !"}
+          {type === "genre" ? "Continuer →" : "C'est parti !"}
         </button>
         {type === "movie" && (
           <ShareMatchButton title={item.title} />
@@ -430,17 +454,86 @@ function MatchModal({ item, type, onClose }) {
 
 function ShareMatchButton({ title }) {
   const [copied, setCopied] = useState(false);
-  const text = `🎬 On regarde "${title}" ce soir ! Trouvé avec CineMatch`;
+  const text = `On regarde « ${title} » ce soir ! Trouvé avec CinéMatch`;
   const share = async () => {
     if (navigator.share) {
-      try { await navigator.share({ title: "CineMatch", text }); return; } catch {}
+      try {
+        await navigator.share({ title: "CinéMatch", text, url: APP_URL });
+        track("match_shared", { method: "native" });
+        return;
+      } catch {}
     }
-    navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+    navigator.clipboard.writeText(`${text}\n${APP_URL}`).then(() => {
+      track("match_shared", { method: "clipboard" });
+      setCopied(true); setTimeout(() => setCopied(false), 2000);
+    });
   };
   return (
     <button onClick={share} style={{ background: copied ? "rgba(74,222,128,0.1)" : "rgba(255,255,255,0.06)", color: copied ? "#4ADE80" : "rgba(255,255,255,0.5)", border: copied ? "1px solid rgba(74,222,128,0.3)" : "1px solid rgba(255,255,255,0.1)", borderRadius: 14, padding: "12px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer", width: "100%", fontFamily: "DM Sans, sans-serif", transition: "all 0.2s" }}>
-      {copied ? "✓ Copié !" : "📱 Partager le match"}
+      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}><Icon name={copied ? "check" : "share"} size={16} color={copied ? "#4ADE80" : "rgba(255,255,255,0.6)"} />{copied ? "Lien copié" : "Partager le match"}</span>
     </button>
+  );
+}
+
+function AlertIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#E8807C" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }}>
+      <circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5" /><path d="M12 16.5h.01" />
+    </svg>
+  );
+}
+
+function ErrorBox({ title, children }) {
+  return (
+    <div role="alert" style={{ display: "flex", gap: 14, alignItems: "flex-start", background: "rgba(217,83,79,0.08)", border: "1px solid rgba(217,83,79,0.35)", borderRadius: 14, padding: 16, marginBottom: 16, textAlign: "left" }}>
+      <AlertIcon />
+      <div>
+        <div style={{ fontWeight: 600, fontSize: 15, color: T.text, marginBottom: 4 }}>{title}</div>
+        <div style={{ fontSize: 13.5, lineHeight: 1.55, color: T.textMid }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function swipeBtn(like) {
+  return {
+    width: 64, height: 64, borderRadius: "50%", cursor: "pointer",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    background: like ? T.accentSoft : T.card,
+    border: like ? `1.5px solid ${T.border}` : `1.5px solid ${T.red}55`,
+  };
+}
+
+function LegalScreen({ onBack }) {
+  const H = ({ children }) => <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2, color: T.accent, fontWeight: 700, margin: "24px 0 8px" }}>{children}</div>;
+  const P = ({ children }) => <p style={{ color: T.textMid, fontSize: 13.5, lineHeight: 1.7, marginBottom: 8 }}>{children}</p>;
+  const A = ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: T.accent }}>{children}</a>;
+  return (
+    <div style={{ paddingTop: 20, paddingBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 22 }}>Mentions légales</div>
+        <button onClick={onBack} style={{ background: "none", border: "none", color: T.sub, fontSize: 13, cursor: "pointer", fontFamily: T.body }}>← Retour</button>
+      </div>
+
+      <H>Éditeur</H>
+      <P>CinéMatch est un projet personnel édité par un particulier, à titre non professionnel et sans activité commerciale. Conformément à l'article 6-III-2 de la loi n° 2004-575 du 21 juin 2004 (LCEN), l'éditeur a choisi de rester anonyme ; ses coordonnées ont été communiquées à l'hébergeur.</P>
+      <P>Contact : <A href="https://github.com/Yrzygma/cin-match/issues">via la page du projet sur GitHub</A>.</P>
+
+      <H>Hébergement</H>
+      <P>Site : Vercel Inc., 440 North Barranca Avenue, Suite 4133, Covina, CA 91723, États-Unis — +1 (951) 383-6898.</P>
+      <P>Base de données des sessions : Supabase Inc., San Francisco, États-Unis.</P>
+
+      <H>Données collectées</H>
+      <P><strong style={{ color: T.text }}>Sur votre appareil.</strong> Votre liste, vos films déjà vus, vos plateformes et vos réglages Mood sont enregistrés uniquement dans le stockage local de votre navigateur. Ils ne quittent pas votre appareil. Vous pouvez les effacer à tout moment depuis l'app ou en vidant les données du site.</P>
+      <P><strong style={{ color: T.text }}>Pendant une session à deux.</strong> Le prénom saisi, le code de session et vos votes (genres et films) sont enregistrés sur Supabase pour permettre la synchronisation en temps réel. Ces données sont supprimées automatiquement au bout de 30 jours.</P>
+      <P><strong style={{ color: T.text }}>Mesure d'audience.</strong> Des statistiques d'usage anonymes (par exemple « session créée », « match trouvé ») sont envoyées à PostHog, hébergé dans l'Union européenne. Aucun cookie n'est déposé, aucun nom ni e-mail n'est collecté, aucune donnée n'est revendue ni utilisée à des fins publicitaires. Ces mesures servent uniquement à améliorer l'app.</P>
+      <P>Conformément au RGPD, vous pouvez demander l'accès à vos données ou leur suppression via le contact ci-dessus.</P>
+
+      <H>Crédits</H>
+      <P>Données des films : <A href="https://www.themoviedb.org">TMDB</A>. Ce produit utilise l'API TMDB mais n'est ni approuvé ni certifié par TMDB.</P>
+      <P>Disponibilités sur les plateformes de streaming : <A href="https://www.justwatch.com">JustWatch</A>.</P>
+      <P>Les affiches, images et marques des films et des plateformes appartiennent à leurs détenteurs respectifs.</P>
+    </div>
   );
 }
 
@@ -458,6 +551,9 @@ export default function CineMatch() {
   const [partnerName, setPartnerName] = useState("");
   const [sessionCode, setSessionCode] = useState("");
   const [copied, setCopied] = useState(false);
+  const [createError, setCreateError] = useState(null); // "network" | null
+  const [joinError, setJoinError] = useState(null);     // "notfound" | "network" | null
+  const [busy, setBusy] = useState(false);
   const [selectedProviders, setSelectedProviders] = useState(() => {
     const saved = JSON.parse(localStorage.getItem('selectedProviders') || '[]');
     // Migration : Canal+ est passe de l'ID 190 a 381 (meilleur catalogue)
@@ -533,6 +629,11 @@ export default function CineMatch() {
   const movieDone = movies.length > 0 && movieIdx >= movies.length;
   const cur = movies[movieIdx];
   const isSolo = !sessionId;
+
+  // ─── MESURE D'AUDIENCE ─────────────────────────────────────────────────────
+  useEffect(() => { initAnalytics(userId); }, [userId]);
+  useEffect(() => { if (genreMatch) track("genre_match", { genre: genreMatch.id, solo: !sessionId }); }, [genreMatch]);
+  useEffect(() => { if (movieMatch) track("movie_match", { genre: selGenreRef.current?.id, solo: !sessionId }); }, [movieMatch]);
 
   // ─── SUPABASE REALTIME ────────────────────────────────────────────────────
   useEffect(() => {
@@ -636,25 +737,58 @@ export default function CineMatch() {
 
   // ─── SESSION CREATION ─────────────────────────────────────────────────────
   const createSession = async () => {
+    if (busy) return;
+    setBusy(true);
+    setCreateError(null);
     const code = generateCode();
     setSessionCode(code);
-    const { error } = await supabase.from("sessions").insert({
-      id: code,
-      status: "waiting",
-      host_name: myName || "Vous",
-    });
-    if (!error) {
-      setSessionId(code);
-      setScreen("waiting");
+    let error = null;
+    try {
+      ({ error } = await supabase.from("sessions").insert({
+        id: code,
+        status: "waiting",
+        host_name: myName || "Vous",
+      }));
+    } catch (e) {
+      error = e;
     }
+    setBusy(false);
+    if (error) {
+      console.error("createSession error:", error);
+      setCreateError("network");
+      return;
+    }
+    track("session_created");
+    setSessionId(code);
+    setScreen("waiting");
   };
 
   const joinSession = async () => {
+    if (busy) return;
+    setBusy(true);
+    setJoinError(null);
     const code = joinCode.toUpperCase().trim();
-    const { data, error } = await supabase.from("sessions").select("*").eq("id", code).single();
-    if (error || !data) { alert("Code invalide !"); return; }
+    let data = null, error = null;
+    try {
+      ({ data, error } = await supabase.from("sessions").select("*").eq("id", code).single());
+    } catch (e) {
+      error = e;
+    }
+    if (error || !data) {
+      setBusy(false);
+      setJoinError(isNetworkError(error) ? "network" : "notfound");
+      return;
+    }
 
-    await supabase.from("sessions").update({ partner_name: myName || "Partenaire", status: "active" }).eq("id", code);
+    try {
+      await supabase.from("sessions").update({ partner_name: myName || "Partenaire", status: "active" }).eq("id", code);
+    } catch (e) {
+      setBusy(false);
+      setJoinError("network");
+      return;
+    }
+    setBusy(false);
+    track("session_joined");
     setSessionId(code);
     setPartnerName(data.host_name || "Votre partenaire");
     setPartnerConnected(true);
@@ -808,10 +942,26 @@ export default function CineMatch() {
           movieList = r.movies;
           empty = r.empty;
           if (movieList.length > 0) {
-            await supabase.from("sessions").update({
+            // Ecriture conditionnelle : seulement si personne n'a deja enregistre
+            // une liste pour ce genre. Si les deux choisissent le genre en meme
+            // temps, le premier gagne et le second reprend sa liste : les deux
+            // swipent exactement les memes films.
+            const { data: written } = await supabase.from("sessions").update({
               genre_id: g.id,
               movie_list: JSON.stringify(movieList),
-            }).eq("id", sessionId);
+            }).eq("id", sessionId)
+              .or(`genre_id.is.null,genre_id.neq.${g.id}`)
+              .select("id");
+            if (!written || written.length === 0) {
+              const { data: again } = await supabase
+                .from("sessions")
+                .select("movie_list, genre_id")
+                .eq("id", sessionId)
+                .single();
+              if (again?.movie_list && again.genre_id === g.id) {
+                movieList = JSON.parse(again.movie_list);
+              }
+            }
           }
         }
       } else {
@@ -821,12 +971,14 @@ export default function CineMatch() {
       }
 
       if (movieList.length === 0) {
+        track("movies_empty", { genre: g.id, reason: empty?.reason || "criteria", providers: selectedProviders.length });
         setEmptyInfo(empty || { reason: "criteria" });
         setScreen("empty");
         setLoading(false);
         return;
       }
 
+      track("movies_loaded", { genre: g.id, count: movieList.length, solo: isSolo, providers: selectedProviders.length, mood_active: isMoodActive(mood) });
       setMovies(movieList);
       let startIdx = 0;
       if (skipSeen) {
@@ -840,6 +992,7 @@ export default function CineMatch() {
       setScreen("movie");
     } catch (e) {
       console.error("startMovies error:", e);
+      track("movies_error", { genre: g?.id });
       setScreen("genre");
     }
     setLoading(false);
@@ -854,6 +1007,7 @@ export default function CineMatch() {
         updated = prev.filter(m => m.id !== movie.id);
       } else {
         updated = [...prev, { id: movie.id, title: movie.title, poster: movie.poster, year: movie.year, imdb: movie.imdb }];
+        track("wishlist_added");
       }
       localStorage.setItem(wishlistKey, JSON.stringify(updated));
       return updated;
@@ -878,7 +1032,9 @@ export default function CineMatch() {
     setScreen("home"); setGenreIdx(0); setMatchedGenres([]); setMovies([]);
     setMovieMatch(null); setGenreMatch(null); setSessionId(null);
     setPartnerConnected(false); setMyGenreLikes(new Set()); setPartnerGenreLikes(new Set());
-    setPartnerMovieLikes(new Set()); setPendingGenreMatch(null); setGenreMatchQueue([]); lastPartnerGenreRef.current = -1; setSelectedMoods([]);
+    setPartnerMovieLikes(new Set()); setPendingGenreMatch(null); setGenreMatchQueue([]); lastPartnerGenreRef.current = -1;
+    setMovieIdx(0); setMyMovieLikes(new Set()); setSelGenre(null); setPartnerName(""); setSessionCode("");
+    setCreateError(null); setJoinError(null);
   };
 
   // Auto-join from URL
@@ -922,7 +1078,7 @@ useEffect(() => {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@400;500;600;700&display=swap');
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
         body{background:#0A0A0B;color:#F5F0E6;font-family:'DM Sans',sans-serif;min-height:100vh}
         ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:4px}
@@ -936,11 +1092,11 @@ useEffect(() => {
 
         {/* Header */}
         <div style={{ width: "100%", maxWidth: 440, padding: "22px 20px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", zIndex: 1 }}>
-          <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 24, letterSpacing: "-1px" }}>Cine<span style={{ color: T.accent }}>Match</span></div>
+          <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 24, letterSpacing: "-1px" }}>Ciné<span style={{ color: T.accent }}>Match</span></div>
           {screen !== "home" && (
             <div style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 100, padding: "5px 14px", fontSize: 12, color: partnerConnected ? "#4ADE80" : "rgba(255,255,255,0.4)", display: "flex", alignItems: "center", gap: 6 }}>
               {partnerConnected && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ADE80" }} />}
-              {partnerConnected ? partnerName : (isSolo ? "Solo" : "En attente...")}
+              {partnerConnected ? partnerName : (isSolo ? "Solo" : "En attente…")}
             </div>
           )}
         </div>
@@ -950,13 +1106,13 @@ useEffect(() => {
           {/* HOME */}
           {screen === "home" && (
             <div style={{ textAlign: "center", paddingTop: 36 }}>
-              <div style={{ fontSize: 72, marginBottom: 18, animation: "float 3s ease-in-out infinite" }}>🎬</div>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 18, animation: "float 3s ease-in-out infinite" }}><Icon name="clap" size={72} /></div>
               <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 36, lineHeight: 1.1, marginBottom: 12, letterSpacing: "-2px" }}>Trouvez votre<br /><span style={{ color: T.accent }}>film ce soir</span></div>
-              <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 15, marginBottom: 36, lineHeight: 1.6 }}>Swipez ensemble, matchez sur le meme film.</div>
-              <Btn onClick={() => setScreen("create")}>Creer une session 🚀</Btn>
-              <Btn outline onClick={() => setScreen("join")}>Rejoindre une session</Btn>
+              <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 15, marginBottom: 36, lineHeight: 1.6 }}>Swipez ensemble, matchez sur le même film.</div>
+              <Btn onClick={() => { setCreateError(null); setScreen("create"); }}>Créer une session</Btn>
+              <Btn outline onClick={() => { setJoinError(null); setScreen("join"); }}>Rejoindre une session</Btn>
               <div style={{ height: 8 }} />
-              <Btn outline onClick={() => { setScreen("genre"); }}>Mode solo</Btn>
+              <Btn outline onClick={() => { track("solo_started"); setScreen("genre"); }}>Mode solo</Btn>
               <div style={{ height: 4 }} />
               <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 4 }}>
                 <button onClick={() => setScreen("mood")} style={{ background: "none", border: "none", color: isMoodActive(mood) ? T.accent : "rgba(255,255,255,0.35)", fontSize: 13, cursor: "pointer", fontFamily: T.body, textDecoration: "underline" }}>
@@ -972,7 +1128,7 @@ useEffect(() => {
                 </button>
                 <span style={{ color: "rgba(255,255,255,0.15)" }}>·</span>
                 <button onClick={() => setScreen("seen")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 13, cursor: "pointer", fontFamily: T.body, textDecoration: "underline" }}>
-                  Deja vus{seenIds.size > 0 ? ` (${seenIds.size})` : ""}
+                  Déjà vus{seenIds.size > 0 ? ` (${seenIds.size})` : ""}
                 </button>
               </div>
 
@@ -985,10 +1141,16 @@ useEffect(() => {
                     style={{ height: 11, opacity: 0.55 }}
                   />
                   <span style={{ fontSize: 10, color: "rgba(255,255,255,0.28)", lineHeight: 1.5, maxWidth: 250 }}>
-                    Ce produit utilise l'API TMDB mais n'est ni approuve ni certifie par TMDB.
+                    Ce produit utilise l'API TMDB mais n'est ni approuvé ni certifié par TMDB.
                   </span>
                 </a>
               </div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.28)", marginTop: 6 }}>
+                Disponibilités sur les plateformes : <a href="https://www.justwatch.com" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(255,255,255,0.4)" }}>JustWatch</a>
+              </div>
+              <button onClick={() => setScreen("legal")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 11, cursor: "pointer", fontFamily: T.body, textDecoration: "underline", marginTop: 8 }}>
+                Mentions légales et confidentialité
+              </button>
             </div>
           )}
 
@@ -996,9 +1158,12 @@ useEffect(() => {
           {screen === "create" && (
             <div style={{ paddingTop: 36 }}>
               <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 25, marginBottom: 6 }}>Nouvelle session</div>
-              <div style={{ color: "rgba(255,255,255,0.33)", fontSize: 14, marginBottom: 26 }}>Entrez votre prenom</div>
-              <input placeholder="Votre prenom" value={myName} onChange={e => setMyName(e.target.value)} style={inputStyle} />
-              <Btn onClick={createSession} disabled={!myName.trim()}>Creer et inviter 🔗</Btn>
+              <div style={{ color: "rgba(255,255,255,0.33)", fontSize: 14, marginBottom: 26 }}>Entrez votre prénom</div>
+              <input placeholder="Votre prénom" aria-label="Votre prénom" value={myName} onChange={e => setMyName(e.target.value)} style={inputStyle} />
+              {createError === "network" && (
+                <ErrorBox title="Connexion impossible">Le service est momentanément indisponible. Réessayez dans une minute.</ErrorBox>
+              )}
+              <Btn onClick={createSession} disabled={!myName.trim() || busy}>{busy ? "Création…" : createError ? "Réessayer" : "Créer et inviter"}</Btn>
               <Btn outline onClick={() => setScreen("home")}>Retour</Btn>
             </div>
           )}
@@ -1022,13 +1187,13 @@ useEffect(() => {
 
               {/* Copy link button */}
               <button onClick={copyLink} style={{ background: copied ? "rgba(74,222,128,0.15)" : "rgba(255,255,255,0.07)", color: copied ? "#4ADE80" : "rgba(255,255,255,0.6)", border: copied ? "1px solid rgba(74,222,128,0.4)" : "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "12px 20px", fontSize: 14, cursor: "pointer", fontFamily: "DM Sans, sans-serif", width: "100%", marginBottom: 12 }}>
-                {copied ? "✓ Lien copie !" : "Copier le lien"}
+                {copied ? "Lien copié" : "Copier le lien"}
               </button>
 
               {/* Waiting indicator */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: "rgba(255,255,255,0.35)", fontSize: 14, marginTop: 16 }}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#FFB347", animation: "pulse 1.5s ease-in-out infinite" }} />
-                En attente de votre partenaire...
+                En attente de votre partenaire…
               </div>
             </div>
           )}
@@ -1038,10 +1203,19 @@ useEffect(() => {
             <div style={{ paddingTop: 36 }}>
               <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 25, marginBottom: 6 }}>Rejoindre une session</div>
               <div style={{ color: "rgba(255,255,255,0.33)", fontSize: 14, marginBottom: 26 }}>Entrez le code partagé par votre partenaire</div>
-              <input placeholder="Votre prenom" value={myName} onChange={e => setMyName(e.target.value)} style={inputStyle} />
-              <input placeholder="Code de session (ex: ABC123)" value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())}
-                style={{ ...inputStyle, fontFamily: T.display, fontWeight: 700, fontSize: 20, letterSpacing: 4, textAlign: "center" }} />
-              <Btn onClick={joinSession} disabled={!joinCode.trim() || !myName.trim()}>Rejoindre ✓</Btn>
+              <input placeholder="Votre prénom" aria-label="Votre prénom" value={myName} onChange={e => setMyName(e.target.value)} style={inputStyle} />
+              <input placeholder="Code de session (ex : ABC123)" aria-label="Code de session" aria-invalid={joinError === "notfound"} value={joinCode} onChange={e => { setJoinCode(e.target.value.toUpperCase()); if (joinError) setJoinError(null); }}
+                style={{ ...inputStyle, fontFamily: T.display, fontWeight: 700, fontSize: 20, letterSpacing: 4, textAlign: "center", ...(joinError === "notfound" ? { border: `1.5px solid ${T.red}`, background: "rgba(217,83,79,0.06)", marginBottom: 8 } : {}) }} />
+              {joinError === "notfound" && (
+                <div role="alert" style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13.5, lineHeight: 1.5, color: "#E8807C", marginBottom: 18 }}>
+                  <AlertIcon size={16} />
+                  <span>Ce code ne correspond à aucune session. Vérifiez-le auprès de votre partenaire.</span>
+                </div>
+              )}
+              {joinError === "network" && (
+                <ErrorBox title="Connexion impossible">Le service est momentanément indisponible. Réessayez dans une minute.</ErrorBox>
+              )}
+              <Btn onClick={joinSession} disabled={!joinCode.trim() || !myName.trim() || busy}>{busy ? "Connexion…" : joinError === "network" ? "Réessayer" : "Rejoindre"}</Btn>
               <Btn outline onClick={() => setScreen("home")}>Retour</Btn>
             </div>
           )}
@@ -1050,7 +1224,7 @@ useEffect(() => {
           {screen === "loading" && (
             <div style={{ textAlign: "center", paddingTop: 80 }}>
               <div style={{ marginBottom: 20, animation: "float 2s ease-in-out infinite" }}><Icon name={selGenre?.icon || "clap"} size={64} /></div>
-              <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 20, marginBottom: 8 }}>Chargement des films...</div>
+              <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 20, marginBottom: 8 }}>Chargement des films…</div>
               <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 14, marginBottom: 28 }}>Recherche en cours sur TMDB</div>
               <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
                 {[0, 1, 2, 3, 4].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: T.accent, animation: `pulse 1.2s ${i * 0.2}s ease-in-out infinite` }} />)}
@@ -1062,7 +1236,7 @@ useEffect(() => {
           {screen === "genre" && !genreDone && !genreMatch && (
             <div>
               <div style={{ paddingTop: 14, marginBottom: 14 }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2.5, color: T.accent, fontWeight: 700, marginBottom: 6 }}>Etape 1 · Genres</div>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2.5, color: T.accent, fontWeight: 700, marginBottom: 6 }}>Étape 1 · Genres</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ flex: 1, height: 2.5, background: "rgba(255,255,255,0.07)", borderRadius: 3, overflow: "hidden" }}>
                     <div style={{ height: "100%", background: T.accent, borderRadius: 3, width: `${(genreIdx / GENRES.length) * 100}%`, transition: "width 0.3s" }} />
@@ -1073,7 +1247,7 @@ useEffect(() => {
               {partnerConnected && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "9px 14px", marginBottom: 14, fontSize: 13, color: "rgba(255,255,255,0.38)" }}>
                   <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ADE80", flexShrink: 0 }} />
-                  <span><strong style={{ color: "rgba(255,255,255,0.6)" }}>{partnerName}</strong> est connecte et swipe en meme temps</span>
+                  <span><strong style={{ color: "rgba(255,255,255,0.6)" }}>{partnerName}</strong> est connecté et swipe en même temps</span>
                 </div>
               )}
               <div style={{ position: "relative", height: 300, marginBottom: 22 }}>
@@ -1082,8 +1256,8 @@ useEffect(() => {
                 <GenreCard key={genreIdx} genre={GENRES[genreIdx]} onSwipe={onGenreSwipe} />
               </div>
               <div style={{ display: "flex", justifyContent: "center", gap: 22, marginBottom: 14 }}>
-                <button onClick={() => onGenreSwipe(false)} style={{ width: 64, height: 64, borderRadius: "50%", background: T.card, border: `1.5px solid ${T.red}55`, color: T.red, fontSize: 24, cursor: "pointer" }}>✗</button>
-                <button onClick={() => onGenreSwipe(true)} style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(74,222,128,0.1)", border: "1.5px solid rgba(74,222,128,0.28)", fontSize: 24, cursor: "pointer" }}>♥</button>
+                <button onClick={() => onGenreSwipe(false)} aria-label="Je n'aime pas" style={swipeBtn(false)}><Icon name="x" size={24} color={T.red} /></button>
+                <button onClick={() => onGenreSwipe(true)} aria-label="J'aime" style={swipeBtn(true)}><Icon name="heart" size={26} color={T.accent} /></button>
               </div>
               <div style={{ textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.18)" }}>Glissez ou appuyez pour voter</div>
             </div>
@@ -1092,7 +1266,7 @@ useEffect(() => {
           {/* GENRE DONE - no match */}
           {screen === "genre" && genreDone && matchedGenres.length === 0 && (
             <div style={{ textAlign: "center", paddingTop: 60 }}>
-              <div style={{ fontSize: 56, marginBottom: 16 }}>😅</div>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><Icon name="x" size={52} color={T.sub} /></div>
               <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 22, marginBottom: 10 }}>Aucun genre en commun</div>
               <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 14, marginBottom: 28 }}>Recommencez !</div>
               <Btn onClick={() => { setGenreIdx(0); setMatchedGenres([]); setMyGenreLikes(new Set()); setPartnerGenreLikes(new Set()); }}>Recommencer</Btn>
@@ -1133,7 +1307,7 @@ useEffect(() => {
                   <div style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", whiteSpace: "nowrap" }}>{movieIdx}/{movies.length}</div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, padding: "8px 14px" }}>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>Passer les deja vus {seenIds.size > 0 ? `(${seenIds.size})` : ""}</span>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>Passer les déjà vus {seenIds.size > 0 ? `(${seenIds.size})` : ""}</span>
                   <div onClick={() => {
                     const next = !skipSeen;
                     setSkipSeen(next);
@@ -1149,8 +1323,8 @@ useEffect(() => {
                 <MovieCard key={`${selGenre?.id}-${movieIdx}`} movie={cur} onSwipe={onMovieSwipe} onDetail={() => setDetail(cur)} seenIds={seenIds} onToggleSeen={toggleSeen} wishlist={wishlist} onToggleWishlist={toggleWishlist} />
               </div>
               <div style={{ display: "flex", justifyContent: "center", gap: 22, marginBottom: 12 }}>
-                <button onClick={() => onMovieSwipe(false)} style={{ width: 64, height: 64, borderRadius: "50%", background: T.card, border: `1.5px solid ${T.red}55`, color: T.red, fontSize: 24, cursor: "pointer" }}>✗</button>
-                <button onClick={() => onMovieSwipe(true)} style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(74,222,128,0.1)", border: "1.5px solid rgba(74,222,128,0.28)", fontSize: 24, cursor: "pointer" }}>♥</button>
+                <button onClick={() => onMovieSwipe(false)} aria-label="Je n'aime pas" style={swipeBtn(false)}><Icon name="x" size={24} color={T.red} /></button>
+                <button onClick={() => onMovieSwipe(true)} aria-label="J'aime" style={swipeBtn(true)}><Icon name="heart" size={26} color={T.accent} /></button>
               </div>
               <div style={{ textAlign: "center" }}>
                 <button onClick={() => setScreen("genre")} style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.38)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "8px 18px", fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}>← Changer de genre</button>
@@ -1161,7 +1335,7 @@ useEffect(() => {
           {/* NO MATCH */}
           {screen === "movie" && movieDone && !movieMatch && (
             <div style={{ textAlign: "center", paddingTop: 60 }}>
-              <div style={{ fontSize: 56, marginBottom: 16 }}>🍿</div>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><Icon name="clap" size={56} color={T.sub} /></div>
               <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 22, marginBottom: 10 }}>Pas de match !</div>
               <div style={{ color: "rgba(255,255,255,0.33)", fontSize: 14, marginBottom: 28 }}>Essayez un autre genre !</div>
               <Btn onClick={() => setScreen("genre")}>Choisir un autre genre</Btn>
@@ -1177,7 +1351,7 @@ useEffect(() => {
                 <button onClick={() => setScreen("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}>← Retour</button>
               </div>
               <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 13, marginBottom: 20, lineHeight: 1.6 }}>
-                Selectionnez vos plateformes pour ne voir que les films disponibles dessus. {selectedProviders.length === 0 && "Aucune selection = tous les films."}
+                Sélectionnez vos plateformes pour ne voir que les films disponibles dessus. {selectedProviders.length === 0 && "Aucune sélection = tous les films."}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
                 {PROVIDERS.map(p => {
@@ -1192,7 +1366,7 @@ useEffect(() => {
                         ? <img src={providerLogos[p.id]} alt={p.name} style={{ width: 30, height: 30, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} />
                         : <div style={{ width: 30, height: 30, borderRadius: 7, background: `${p.color}22`, border: `1px solid ${p.color}55`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, color: p.color, flexShrink: 0 }}>{p.name[0]}</div>}
                       <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 13, color: selected ? "white" : "rgba(255,255,255,0.55)" }}>{p.name}</div>
-                      {selected && <div style={{ marginLeft: "auto", width: 18, height: 18, borderRadius: "50%", background: p.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "white", fontWeight: 700, flexShrink: 0 }}>✓</div>}
+                      {selected && <div style={{ marginLeft: "auto", width: 18, height: 18, borderRadius: "50%", background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon name="check" size={12} color="white" /></div>}
                     </div>
                   );
                 })}
@@ -1200,10 +1374,11 @@ useEffect(() => {
               {selectedProviders.length > 0 && (
                 <button onClick={() => { setSelectedProviders([]); localStorage.removeItem('selectedProviders'); }}
                   style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif", textDecoration: "underline", width: "100%", textAlign: "center", marginBottom: 10 }}>
-                  Tout deselectionner
+                  Tout désélectionner
                 </button>
               )}
-              <Btn onClick={() => setScreen("home")}>Valider ✓</Btn>
+              <Btn onClick={() => setScreen("home")}>Valider</Btn>
+              <div style={{ fontSize: 11, color: T.sub, textAlign: "center", marginTop: 6 }}>Disponibilités fournies par JustWatch, via TMDB.</div>
             </div>
           )}
 
@@ -1215,13 +1390,13 @@ useEffect(() => {
                 <button onClick={() => setScreen("home")} style={{ background: "none", border: "none", color: T.sub, fontSize: 13, cursor: "pointer", fontFamily: T.body }}>← Retour</button>
               </div>
               <div style={{ color: T.sub, fontSize: 13, marginBottom: 22, lineHeight: 1.6 }}>
-                Affinez le type de films proposes. Ces reglages s'appliquent a vos prochaines sessions.
+                Affinez le type de films proposés. Ces réglages s'appliquent à vos prochaines sessions.
               </div>
 
               {/* ANNEE */}
               <div style={{ marginBottom: 24 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2, color: T.accent, fontWeight: 700 }}>Annee de sortie</div>
+                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2, color: T.accent, fontWeight: 700 }}>Année de sortie</div>
                   <div style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>{mood.yearMin} — {mood.yearMax}</div>
                 </div>
                 <RangeSlider
@@ -1247,7 +1422,7 @@ useEffect(() => {
               {/* DUREE */}
               <div style={{ marginBottom: 24 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2, color: T.accent, fontWeight: 700 }}>Duree</div>
+                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2, color: T.accent, fontWeight: 700 }}>Durée</div>
                   <div style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>{fmtDur(mood.runtimeMin)} — {fmtDur(mood.runtimeMax)}</div>
                 </div>
                 <RangeSlider
@@ -1261,7 +1436,7 @@ useEffect(() => {
               <div style={{ marginBottom: 24 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
                   <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2, color: T.accent, fontWeight: 700 }}>Pays d'origine</div>
-                  <div style={{ fontSize: 12, color: T.sub }}>{mood.countries.length === 0 ? "Tous" : `${mood.countries.length} selectionne${mood.countries.length > 1 ? "s" : ""}`}</div>
+                  <div style={{ fontSize: 12, color: T.sub }}>{mood.countries.length === 0 ? "Tous" : `${mood.countries.length} sélectionné${mood.countries.length > 1 ? "s" : ""}`}</div>
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
                   {COUNTRIES.map(co => {
@@ -1287,7 +1462,7 @@ useEffect(() => {
               {isMoodActive(mood) && (
                 <button onClick={() => saveMood({ ...DEFAULT_MOOD })}
                   style={{ background: "none", border: "none", color: T.sub, fontSize: 13, cursor: "pointer", fontFamily: T.body, textDecoration: "underline", width: "100%", textAlign: "center", marginTop: 4 }}>
-                  Reinitialiser les criteres
+                  Réinitialiser les critères
                 </button>
               )}
             </div>
@@ -1304,8 +1479,8 @@ useEffect(() => {
               </div>
               <div style={{ color: T.sub, fontSize: 14, lineHeight: 1.7, marginBottom: 28, padding: "0 10px" }}>
                 {emptyInfo?.reason === "platform"
-                  ? <>Des films correspondent a vos criteres, mais aucun n'est disponible sur {selectedProviders.length > 1 ? "vos plateformes" : "votre plateforme"}.<br/>Ajoutez une plateforme ou assouplissez vos criteres.</>
-                  : <>Vos criteres Mood sont trop restrictifs pour ce genre.<br/>Essayez d'elargir l'annee, la duree ou la note minimum.</>}
+                  ? <>Des films correspondent à vos critères, mais aucun n'est disponible sur {selectedProviders.length > 1 ? "vos plateformes" : "votre plateforme"}.<br/>Ajoutez une plateforme ou assouplissez vos critères.</>
+                  : <>Vos critères Mood sont trop restrictifs pour ce genre.<br/>Essayez d'élargir l'année, la durée ou la note minimum.</>}
               </div>
               {emptyInfo?.reason === "platform" && (
                 <Btn onClick={() => setScreen("providers")}>Modifier mes plateformes</Btn>
@@ -1324,9 +1499,9 @@ useEffect(() => {
               </div>
               {wishlist.length === 0 ? (
                 <div style={{ textAlign: "center", paddingTop: 40, color: "rgba(255,255,255,0.3)", fontSize: 15 }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>🔖</div>
+                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><Icon name="bookmark" size={44} color={T.sub} /></div>
                   Votre liste est vide<br/>
-                  <span style={{ fontSize: 13, marginTop: 8, display: "block" }}>Appuyez sur 🔖 sur les cartes pour sauvegarder</span>
+                  <span style={{ fontSize: 13, marginTop: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>Appuyez sur <Icon name="bookmark" size={13} color={T.sub} /> sur une carte pour la sauvegarder</span>
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1340,9 +1515,9 @@ useEffect(() => {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</div>
-                        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{m.year}{m.imdb ? ` · ⭐ ${m.imdb}` : ""}</div>
+                        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{m.year}{m.imdb ? <> · <Icon name="star" size={10} color="#F5C518" /> {m.imdb}</> : ""}</div>
                       </div>
-                      <button onClick={() => removeWishlist(m.id)} style={{ background: `${T.red}1a`, border: `1px solid ${T.red}44`, borderRadius: 8, padding: "6px 10px", color: T.red, fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif", flexShrink: 0 }}>✕</button>
+                      <button onClick={() => removeWishlist(m.id)} style={{ background: `${T.red}1a`, border: `1px solid ${T.red}44`, borderRadius: 8, padding: "6px 10px", color: T.red, fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif", flexShrink: 0, display: "flex", alignItems: "center" }} aria-label="Retirer"><Icon name="x" size={14} color={T.red} /></button>
                     </div>
                   ))}
                   <div style={{ marginTop: 10 }}>
@@ -1357,18 +1532,18 @@ useEffect(() => {
           {screen === "seen" && (
             <div style={{ paddingTop: 20 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-                <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 22 }}>Mes films deja vus</div>
+                <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 22 }}>Mes films déjà vus</div>
                 <button onClick={() => setScreen("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}>← Retour</button>
               </div>
               {seenIds.size === 0 ? (
                 <div style={{ textAlign: "center", paddingTop: 40, color: "rgba(255,255,255,0.3)", fontSize: 15 }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>🎬</div>
-                  Aucun film marque comme deja vu
+                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><Icon name="clap" size={44} color={T.sub} /></div>
+                  Aucun film marqué comme déjà vu
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
-                    {seenIds.size} film{seenIds.size > 1 ? "s" : ""} — ces films seront exclus si vous activez "Passer les deja vus"
+                    {seenIds.size} film{seenIds.size > 1 ? "s" : ""} — ces films seront exclus si vous activez « Passer les déjà vus »
                   </div>
                   {seenMovies.length > 0 ? seenMovies.map(m => (
                     <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "10px 14px" }}>
@@ -1377,14 +1552,14 @@ useEffect(() => {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</div>
-                        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{m.year}{m.imdb ? ` · ⭐ ${m.imdb}` : ""}</div>
+                        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{m.year}{m.imdb ? <> · <Icon name="star" size={10} color="#F5C518" /> {m.imdb}</> : ""}</div>
                       </div>
-                      <button onClick={() => removeSeen(m.id)} style={{ background: `${T.red}1a`, border: `1px solid ${T.red}44`, borderRadius: 8, padding: "6px 10px", color: T.red, fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif", flexShrink: 0 }}>✕</button>
+                      <button onClick={() => removeSeen(m.id)} style={{ background: `${T.red}1a`, border: `1px solid ${T.red}44`, borderRadius: 8, padding: "6px 10px", color: T.red, fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif", flexShrink: 0, display: "flex", alignItems: "center" }} aria-label="Retirer"><Icon name="x" size={14} color={T.red} /></button>
                     </div>
                   )) : [...seenIds].map(id => (
                     <div key={id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "12px 16px" }}>
                       <div style={{ fontSize: 14, color: "rgba(255,255,255,0.6)" }}>Film #{id}</div>
-                      <button onClick={() => removeSeen(id)} style={{ background: `${T.red}1a`, border: `1px solid ${T.red}44`, borderRadius: 8, padding: "5px 12px", color: T.red, fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}>✕</button>
+                      <button onClick={() => removeSeen(id)} style={{ background: `${T.red}1a`, border: `1px solid ${T.red}44`, borderRadius: 8, padding: "5px 12px", color: T.red, fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif", display: "flex", alignItems: "center" }} aria-label="Retirer"><Icon name="x" size={14} color={T.red} /></button>
                     </div>
                   ))}
                   <div style={{ marginTop: 10 }}>
@@ -1395,12 +1570,15 @@ useEffect(() => {
             </div>
           )}
 
+          {/* MENTIONS LEGALES */}
+          {screen === "legal" && <LegalScreen onBack={() => setScreen("home")} />}
+
           {/* FINAL */}
           {screen === "final" && (
             <div style={{ textAlign: "center", paddingTop: 56 }}>
-              <div style={{ fontSize: 72, marginBottom: 16, animation: "float 3s ease-in-out infinite" }}>🍿</div>
-              <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 32, marginBottom: 10, letterSpacing: "-1px" }}>Bonne seance !</div>
-              <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 15, marginBottom: 34 }}>Eteignez les lumieres et profitez !</div>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16, animation: "float 3s ease-in-out infinite" }}><Icon name="clap" size={72} /></div>
+              <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 32, marginBottom: 10, letterSpacing: "-1px" }}>Bonne séance !</div>
+              <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 15, marginBottom: 34 }}>Éteignez les lumières et profitez !</div>
               <Btn onClick={reset}>Nouvelle session</Btn>
             </div>
           )}
