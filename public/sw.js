@@ -1,7 +1,7 @@
 // Service worker minimal de CinéMatch.
 // Strategie "reseau d'abord" : l'app est toujours servie a jour depuis Vercel.
 // Le cache ne sert qu'a afficher la page d'accueil si le reseau est coupe.
-const CACHE = "cinematch-v1";
+const CACHE = "cinematch-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.add("/")).then(() => self.skipWaiting()));

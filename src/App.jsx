@@ -9,32 +9,56 @@ const supabase = createClient(
 );
 
 
-// ─── THEME : NOIR CINEMA ──────────────────────────────────────────────────────
+// ─── THEME : ALLUMETTE ────────────────────────────────────────────────────────
+// Charte « Allumette » (boite d'allumettes + risographie), validee le 25/10/2026.
+// Ecrans clairs (papier creme) par defaut ; les ecrans de swipe passent en
+// version « soir » (fond aubergine, cartes creme) pour ne pas eblouir.
 const T = {
-  bg: "#0A0A0B",
-  bgGrad: "radial-gradient(ellipse at top, #16140F 0%, #0A0A0B 55%)",
-  card: "#16161A",
-  cardSoft: "#1C1C20",
-  border: "rgba(212,175,55,0.18)",
-  borderSoft: "rgba(255,255,255,0.08)",
-  accent: "#D4AF37",
-  accentSoft: "rgba(212,175,55,0.12)",
-  accentDark: "#0A0A0B",
-  text: "#F5F0E6",
-  textMid: "rgba(245,240,230,0.7)",
-  sub: "rgba(245,240,230,0.45)",
-  display: "'Fraunces', serif",
-  body: "'DM Sans', sans-serif",
-  btnGrad: "linear-gradient(135deg, #D4AF37, #C19B2E)",
-  green: "#5FB97A",
-  red: "#D9534F",
+  paper: "#F4EBDD",     // Papier du soir
+  surface: "#FBF6EE",   // champs, fonds de cartes secondaires
+  ink: "#342A36",       // Encre aubergine
+  night: "#2B2330",     // fond des ecrans de swipe
+  coral: "#B83F2E",     // Allumette corail : accent principal
+  blue: "#3157C8",      // Bleu imprimeur : accent secondaire
+  yellow: "#E8B94F",    // Jaune soufre : etincelles, details
+  green: "#24634F",     // Vert accord : succes
+  red: "#A9344C",       // Rouge passage : erreurs
+  white: "#FFFFFF",
+  display: "'Bowlby One SC', sans-serif",
+  body: "'Karla', sans-serif",
+};
+
+// Couleurs qui changent selon que l'ecran est clair ou « soir »
+const LIGHT = {
+  dark: false,
+  bg: T.paper,
+  ink: T.ink,
+  mid: "#5E5260",
+  sub: "#6E6270",
+  line: "rgba(52,42,54,0.16)",
+  lineStrong: T.ink,
+  soft: "rgba(52,42,54,0.06)",
+  accent: T.coral,
+  link: T.blue,
+};
+const DARK = {
+  dark: true,
+  bg: T.night,
+  ink: T.paper,
+  mid: "#C9BFB3",
+  sub: "#B3A99E",
+  line: "rgba(244,235,221,0.18)",
+  lineStrong: T.paper,
+  soft: "rgba(244,235,221,0.07)",
+  accent: T.yellow,
+  link: T.yellow,
 };
 
 // ─── SVG ICONS ────────────────────────────────────────────────────────────────
-function Icon({ name, color = T.accent, size = 36, fill = false }) {
-  const s = { width: size, height: size, viewBox: "0 0 32 32", fill: "none", stroke: color, strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" };
+function Icon({ name, color = T.ink, size = 36, fill = false }) {
+  const s = { width: size, height: size, viewBox: "0 0 32 32", fill: "none", stroke: color, strokeWidth: 2.4, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
   const icons = {
-    clap: <svg {...s}><rect x="4" y="12" width="24" height="16" rx="2"/><path d="M4 12L6.5 5L28 8L26.5 15"/><path d="M14 6L8 13M16 7L14 14M22 8.5L20 15"/></svg>,
+    match: <svg {...s}><path d="M10 27L21 9"/><ellipse cx="22.5" cy="6.5" rx="3.2" ry="4.2" transform="rotate(32 22.5 6.5)" fill={color}/><path d="M27 3.5l2-1.5M28 9h2.5"/></svg>,
     action: <svg {...s}><path d="M13 2L5 18h7l-2 12 12-18h-7l2-10z"/></svg>,
     comedy: <svg {...s}><circle cx="16" cy="16" r="12"/><path d="M11 13h.01M21 13h.01"/><path d="M10 19c1.5 2 10.5 2 12 0"/></svg>,
     thriller: <svg {...s}><path d="M16 3l11 6v7c0 7-5 11-11 13C10 27 5 23 5 16V9l11-6z"/><path d="M16 12v5"/><path d="M16 21h.01"/></svg>,
@@ -45,30 +69,96 @@ function Icon({ name, color = T.accent, size = 36, fill = false }) {
     animation: <svg {...s}><path d="M16 3l3.5 7L27 11l-5.5 5.5L23 24l-7-4-7 4 1.5-7.5L5 11l7.5-1z"/></svg>,
     adventure: <svg {...s}><circle cx="16" cy="16" r="12"/><path d="M21 11l-3.5 7.5L10 22l3.5-7.5L21 11z"/></svg>,
     documentary: <svg {...s}><rect x="4" y="8" width="24" height="18" rx="2"/><circle cx="16" cy="17" r="4"/><path d="M9 8V5h6v3"/></svg>,
-    heart: <svg width={size} height={size} viewBox="0 0 24 24" fill={color}><path d="M12 21C12 21 3 14.5 3 8.5C3 5.5 5.5 3 8.5 3C10.3 3 12 4.2 12 4.2C12 4.2 13.7 3 15.5 3C18.5 3 21 5.5 21 8.5C21 14.5 12 21 12 21Z"/></svg>,
-    x: <svg {...s}><path d="M8 8l16 16M24 8L8 24"/></svg>,
-    play: <svg width={size} height={size} viewBox="0 0 24 24" fill={color}><path d="M8 5v14l11-7z"/></svg>,
-    bookmark: <svg width={size} height={size} viewBox="0 0 24 24" fill={fill ? color : "none"} stroke={color} strokeWidth={2} strokeLinejoin="round"><path d="M6 4h12v16l-6-4-6 4V4z"/></svg>,
+    heart: <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true"><path d="M12 21C12 21 3 14.5 3 8.5C3 5.5 5.5 3 8.5 3C10.3 3 12 4.2 12 4.2C12 4.2 13.7 3 15.5 3C18.5 3 21 5.5 21 8.5C21 14.5 12 21 12 21Z"/></svg>,
+    x: <svg {...s} strokeWidth={3}><path d="M8 8l16 16M24 8L8 24"/></svg>,
+    play: <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z"/></svg>,
+    bookmark: <svg width={size} height={size} viewBox="0 0 24 24" fill={fill ? color : "none"} stroke={color} strokeWidth={2.4} strokeLinejoin="round" aria-hidden="true"><path d="M6 4h12v16l-6-4-6 4V4z"/></svg>,
     back: <svg {...s}><path d="M20 8l-8 8 8 8"/></svg>,
-    star: <svg width={size} height={size} viewBox="0 0 24 24" fill={color}><path d="M12 2l3 6.5 7 .8-5 4.8 1.3 7L12 17.8 5.7 21l1.3-7-5-4.8 7-.8z"/></svg>,
+    star: <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true"><path d="M12 2l3 6.5 7 .8-5 4.8 1.3 7L12 17.8 5.7 21l1.3-7-5-4.8 7-.8z"/></svg>,
     share: <svg {...s}><circle cx="7" cy="16" r="3"/><circle cx="23" cy="8" r="3"/><circle cx="23" cy="24" r="3"/><path d="M10 14.5l10-5M10 17.5l10 5"/></svg>,
-    check: <svg {...s}><path d="M6 16l7 7L26 9"/></svg>,
+    check: <svg {...s} strokeWidth={3}><path d="M6 16l7 7L26 9"/></svg>,
   };
   return icons[name] || null;
 }
 
+// Logo : boite d'allumettes entrouverte, une allumette inclinee qui depasse.
+function LogoMark({ size = 40, mono = null }) {
+  const ink = mono || T.ink;
+  return (
+    <svg viewBox="0 0 100 100" width={size} height={size} aria-hidden="true">
+      <path d="M14 42 L70 38 L72 90 L16 92 Z" fill={mono ? "none" : T.yellow} stroke={ink} strokeWidth="4" strokeLinejoin="round" />
+      <path d="M70 38 L84 31 L86 83 L72 90 Z" fill={mono ? ink : T.blue} stroke={ink} strokeWidth="4" strokeLinejoin="round" />
+      <line x1="36" y1="64" x2="56" y2="20" stroke={ink} strokeWidth="6.5" strokeLinecap="round" />
+      <ellipse cx="58" cy="15" rx="7.5" ry="9.5" transform="rotate(25 58 15)" fill={mono ? ink : T.coral} stroke={ink} strokeWidth="3" />
+      <line x1="70" y1="10" x2="79" y2="5" stroke={mono ? ink : T.yellow} strokeWidth="4.5" strokeLinecap="round" />
+      <line x1="72" y1="20" x2="82" y2="21" stroke={mono ? ink : T.yellow} strokeWidth="4.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function Wordmark({ C, size = 22 }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+      <LogoMark size={size + 14} />
+      <div style={{ fontFamily: T.display, fontSize: size, lineHeight: 1, letterSpacing: 0.3 }}>
+        <span style={{ color: C.dark ? T.yellow : T.coral }}>Ciné</span>
+        <span style={{ color: C.dark ? T.paper : T.blue }}>Match</span>
+      </div>
+    </div>
+  );
+}
+
+// Deux allumettes qui se rapprochent, avec etincelles. `animate` : arrivee du match.
+function Matches({ size = 160, ink = T.ink, animate = false }) {
+  const h = size * 0.75;
+  return (
+    <svg viewBox="0 0 180 135" width={size} height={h} aria-hidden="true" style={{ overflow: "visible" }}>
+      <g className={animate ? "cm-left" : undefined}>
+        <line x1="34" y1="128" x2="80" y2="52" stroke={T.blue} strokeWidth="9" strokeLinecap="round" opacity="0.5" transform="translate(3 2)" />
+        <line x1="34" y1="128" x2="80" y2="52" stroke={ink} strokeWidth="8" strokeLinecap="round" />
+        <ellipse cx="83" cy="45" rx="10" ry="13.5" transform="rotate(32 83 45)" fill={T.coral} stroke={ink} strokeWidth="3" />
+      </g>
+      <g className={animate ? "cm-right" : undefined}>
+        <line x1="146" y1="128" x2="100" y2="52" stroke={T.blue} strokeWidth="9" strokeLinecap="round" opacity="0.5" transform="translate(3 2)" />
+        <line x1="146" y1="128" x2="100" y2="52" stroke={ink} strokeWidth="8" strokeLinecap="round" />
+        <ellipse cx="97" cy="45" rx="10" ry="13.5" transform="rotate(-32 97 45)" fill={T.coral} stroke={ink} strokeWidth="3" />
+      </g>
+      <g className={animate ? "cm-spark" : undefined} stroke={T.yellow} strokeWidth="5" strokeLinecap="round">
+        <line x1="90" y1="24" x2="90" y2="8" />
+        <line x1="73" y1="28" x2="63" y2="16" />
+        <line x1="107" y1="28" x2="117" y2="16" />
+        <line x1="61" y1="43" x2="47" y2="39" />
+        <line x1="119" y1="43" x2="133" y2="39" />
+      </g>
+    </svg>
+  );
+}
+
+// Grain de papier risographie (texture legere, jamais sur les affiches)
+function Grain({ opacity = 0.04, dark = false }) {
+  return (
+    <svg aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity, mixBlendMode: dark ? "normal" : "multiply", pointerEvents: "none" }}>
+      <filter id={dark ? "cm-grain-d" : "cm-grain"}>
+        <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch" />
+      </filter>
+      <rect width="100%" height="100%" filter={`url(#${dark ? "cm-grain-d" : "cm-grain"})`} />
+    </svg>
+  );
+}
+
 // ─── GENRES ───────────────────────────────────────────────────────────────────
+// Les accents tournent entre les trois encres de la charte
 const GENRES = [
-  { id: "action",      name: "Action",       icon: "action",      color: "#D4AF37", desc: "Adrénaline & explosions" },
-  { id: "comedy",      name: "Comédie",      icon: "comedy",      color: "#D4AF37", desc: "Rires garantis" },
-  { id: "thriller",    name: "Thriller",     icon: "thriller",    color: "#D4AF37", desc: "Suspense & tension" },
-  { id: "scifi",       name: "Sci-Fi",       icon: "scifi",       color: "#D4AF37", desc: "Futur & univers" },
-  { id: "horror",      name: "Horreur",      icon: "horror",      color: "#D4AF37", desc: "Frissons & terreur" },
-  { id: "drama",       name: "Drame",        icon: "drama",       color: "#D4AF37", desc: "Émotions profondes" },
-  { id: "romance",     name: "Romance",      icon: "romance",     color: "#D4AF37", desc: "Feel-good & amour" },
-  { id: "animation",   name: "Animation",    icon: "animation",   color: "#D4AF37", desc: "Tous publics" },
-  { id: "adventure",   name: "Aventure",     icon: "adventure",   color: "#D4AF37", desc: "Exploration & épopée" },
-  { id: "documentary", name: "Documentaire", icon: "documentary", color: "#D4AF37", desc: "Le monde réel" },
+  { id: "action",      name: "Action",       icon: "action",      color: T.coral, desc: "Adrénaline et explosions" },
+  { id: "comedy",      name: "Comédie",      icon: "comedy",      color: T.blue,  desc: "Rires garantis" },
+  { id: "thriller",    name: "Thriller",     icon: "thriller",    color: T.ink,   desc: "Suspense et tension" },
+  { id: "scifi",       name: "Sci-Fi",       icon: "scifi",       color: T.blue,  desc: "Futur et univers" },
+  { id: "horror",      name: "Horreur",      icon: "horror",      color: T.coral, desc: "Frissons et terreur" },
+  { id: "drama",       name: "Drame",        icon: "drama",       color: T.ink,   desc: "Émotions profondes" },
+  { id: "romance",     name: "Romance",      icon: "romance",     color: T.coral, desc: "Feel-good et amour" },
+  { id: "animation",   name: "Animation",    icon: "animation",   color: T.blue,  desc: "Tous publics" },
+  { id: "adventure",   name: "Aventure",     icon: "adventure",   color: T.ink,   desc: "Exploration et épopée" },
+  { id: "documentary", name: "Documentaire", icon: "documentary", color: T.blue,  desc: "Le monde réel" },
 ];
 
 
@@ -77,8 +167,8 @@ const PROVIDERS = [
   { id: 8,   name: "Netflix",      color: "#E50914" },
   { id: 119, name: "Amazon Prime", color: "#00A8E0" },
   { id: 337, name: "Disney+",      color: "#113CCF" },
-  { id: 350, name: "Apple TV+",    color: "#888888" },
-  { id: 381, name: "Canal+",       color: "#C4C4C4" },
+  { id: 350, name: "Apple TV+",    color: "#555555" },
+  { id: 381, name: "Canal+",       color: "#1A1A1A" },
   { id: 531, name: "Paramount+",   color: "#0064FF" },
 ];
 
@@ -123,7 +213,6 @@ function isMoodActive(m) {
 }
 
 
-// ─── MOOD FILTERS ─────────────────────────────────────────────────────────────
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const APP_URL = "https://cinematch-tau-eight.vercel.app";
 
@@ -163,8 +252,22 @@ function fmtDur(min) {
   return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
 }
 
+const thumbCss = (cls, extra = "") => `
+  .${cls}::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: ${T.coral}; border: 2.5px solid ${T.ink};
+    cursor: pointer; ${extra}
+  }
+  .${cls}::-moz-range-thumb {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: ${T.coral}; border: 2.5px solid ${T.ink};
+    cursor: pointer; ${extra}
+  }
+`;
+
 // Curseur de note minimum, sur 10 (meme echelle que les cartes de films)
-function RatingSlider({ value, onChange }) {
+function RatingSlider({ value, onChange, C }) {
   const MIN = 0;
   const MAX = 9;
   const pct = ((value - MIN) / (MAX - MIN)) * 100;
@@ -172,37 +275,23 @@ function RatingSlider({ value, onChange }) {
   return (
     <div>
       <div style={{ position: "relative", height: 28 }}>
-        <style>{`
-          .rt::-webkit-slider-thumb {
-            -webkit-appearance: none; appearance: none;
-            width: 20px; height: 20px; border-radius: 50%;
-            background: ${T.accent}; border: 2px solid ${T.bg};
-            cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
-          }
-          .rt::-moz-range-thumb {
-            width: 20px; height: 20px; border-radius: 50%;
-            background: ${T.accent}; border: 2px solid ${T.bg};
-            cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
-          }
-        `}</style>
-        <div style={{ position: "absolute", top: 12, left: 0, right: 0, height: 4, borderRadius: 2, background: T.borderSoft }} />
-        <div style={{ position: "absolute", top: 12, left: 0, height: 4, borderRadius: 2, background: T.accent, width: `${pct}%` }} />
-        <input className="rt" type="range" min={MIN} max={MAX} step={0.5} value={value}
+        <style>{thumbCss("rt")}</style>
+        <div style={{ position: "absolute", top: 12, left: 0, right: 0, height: 4, borderRadius: 2, background: C.line }} />
+        <div style={{ position: "absolute", top: 12, left: 0, height: 4, borderRadius: 2, background: T.coral, width: `${pct}%` }} />
+        <input className="rt" type="range" min={MIN} max={MAX} step={0.5} value={value} aria-label="Note minimum"
           onChange={(e) => onChange(Number(e.target.value))}
           style={{ position: "absolute", width: "100%", top: 0, height: 28, WebkitAppearance: "none", appearance: "none", background: "none", margin: 0 }} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
-        <span style={{ fontSize: 11, color: T.sub }}>Peu importe</span>
-        <span style={{ fontSize: 11, color: T.sub }}>9 / 10</span>
+        <span style={{ fontSize: 12, color: C.sub }}>Peu importe</span>
+        <span style={{ fontSize: 12, color: C.sub }}>9 / 10</span>
       </div>
     </div>
   );
 }
 
 // Double curseur min/max
-function RangeSlider({ min, max, step, valueMin, valueMax, onChange }) {
+function RangeSlider({ min, max, step, valueMin, valueMax, onChange, C, label }) {
   const pct = (v) => ((v - min) / (max - min)) * 100;
   const setLo = (v) => onChange(Math.min(v, valueMax - step), valueMax);
   const setHi = (v) => onChange(valueMin, Math.max(v, valueMin + step));
@@ -215,27 +304,13 @@ function RangeSlider({ min, max, step, valueMin, valueMax, onChange }) {
 
   return (
     <div style={{ position: "relative", height: 28 }}>
-      <style>{`
-        .rs::-webkit-slider-thumb {
-          -webkit-appearance: none; appearance: none;
-          width: 20px; height: 20px; border-radius: 50%;
-          background: ${T.accent}; border: 2px solid ${T.bg};
-          cursor: pointer; pointer-events: auto;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.5);
-        }
-        .rs::-moz-range-thumb {
-          width: 20px; height: 20px; border-radius: 50%;
-          background: ${T.accent}; border: 2px solid ${T.bg};
-          cursor: pointer; pointer-events: auto;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.5);
-        }
-      `}</style>
-      <div style={{ position: "absolute", top: 12, left: 0, right: 0, height: 4, borderRadius: 2, background: T.borderSoft }} />
-      <div style={{ position: "absolute", top: 12, height: 4, borderRadius: 2, background: T.accent,
+      <style>{thumbCss("rs", "pointer-events: auto;")}</style>
+      <div style={{ position: "absolute", top: 12, left: 0, right: 0, height: 4, borderRadius: 2, background: C.line }} />
+      <div style={{ position: "absolute", top: 12, height: 4, borderRadius: 2, background: T.coral,
         left: `${pct(valueMin)}%`, right: `${100 - pct(valueMax)}%` }} />
-      <input className="rs" type="range" min={min} max={max} step={step} value={valueMin}
+      <input className="rs" type="range" min={min} max={max} step={step} value={valueMin} aria-label={`${label} minimum`}
         onChange={(e) => setLo(Number(e.target.value))} style={thumbStyle} />
-      <input className="rs" type="range" min={min} max={max} step={step} value={valueMax}
+      <input className="rs" type="range" min={min} max={max} step={step} value={valueMax} aria-label={`${label} maximum`}
         onChange={(e) => setHi(Number(e.target.value))} style={thumbStyle} />
     </div>
   );
@@ -244,31 +319,32 @@ function RangeSlider({ min, max, step, valueMin, valueMax, onChange }) {
 function RatingBadge({ score }) {
   if (!score) return null;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(245,197,24,0.14)", border: "1px solid rgba(245,197,24,0.4)", borderRadius: 7, padding: "3px 8px", fontSize: 11, fontWeight: 700, color: "#F5C518" }}>
-      <Icon name="star" size={11} color="#F5C518" /> {score}/10
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: T.paper, border: `2px solid ${T.ink}`, borderRadius: 999, padding: "3px 9px", fontSize: 13, fontWeight: 700, color: T.ink, fontFamily: T.body }}>
+      <Icon name="star" size={13} color={T.coral} /> {String(score).replace(".", ",")}/10
     </span>
   );
 }
 
+// Tampon affiche pendant le glisser
 function Ind({ type }) {
+  const like = type === "like";
   return (
-    <div style={{ position: "absolute", top: 20, right: type === "like" ? 18 : "auto", left: type === "nope" ? 18 : "auto", background: type === "like" ? T.accentSoft : "rgba(217,83,79,0.16)", border: `2.5px solid ${type === "like" ? T.accent : T.red}`, borderRadius: 10, padding: "5px 14px", color: type === "like" ? T.accent : T.red, fontFamily: T.display, fontWeight: 700, fontSize: 18, letterSpacing: 1, transform: type === "like" ? "rotate(8deg)" : "rotate(-8deg)", pointerEvents: "none" }}>
-      {type === "like" ? "MATCH" : "NON"}
+    <div style={{ position: "absolute", top: 18, right: like ? 16 : "auto", left: like ? "auto" : 16, background: like ? T.coral : T.paper, border: `2.5px solid ${T.ink}`, borderRadius: 10, padding: "6px 14px", color: like ? T.white : T.ink, fontFamily: T.display, fontSize: 18, letterSpacing: 1, transform: like ? "rotate(5deg)" : "rotate(-5deg)", boxShadow: `3px 3px 0 ${T.ink}`, pointerEvents: "none", zIndex: 3 }}>
+      {like ? "J'aime" : "Non"}
     </div>
   );
 }
 
 function Poster({ url, title, style }) {
   const [ok, setOk] = useState(false);
-  const hue = [...(title || "")].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
-  const initials = (title || "").replace(/[^a-zA-Z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "?";
+  const initials = (title || "").replace(/[^a-zA-ZÀ-ÿ ]/g, "").split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "?";
   return (
-    <div style={{ position: "relative", background: `linear-gradient(135deg,hsl(${hue},35%,14%),hsl(${hue},25%,7%))`, overflow: "hidden", ...style }}>
+    <div style={{ position: "relative", background: `repeating-linear-gradient(135deg, #3B4A6B 0 14px, #34425F 14px 28px)`, overflow: "hidden", ...style }}>
       {url && <img src={url} alt={title} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: ok ? 1 : 0, transition: "opacity 0.4s" }} onLoad={() => setOk(true)} />}
       {!ok && (
         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6 }}>
-          <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 34, color: `hsl(${hue},65%,65%)` }}>{initials}</div>
-          <div style={{ fontSize: 10, color: `hsl(${hue},30%,45%)`, textAlign: "center", padding: "0 10px", lineHeight: 1.4 }}>{title}</div>
+          <div style={{ fontFamily: T.display, fontSize: 30, color: T.yellow }}>{initials}</div>
+          <div style={{ fontSize: 11, color: T.paper, textAlign: "center", padding: "0 10px", lineHeight: 1.4 }}>{title}</div>
         </div>
       )}
     </div>
@@ -276,18 +352,20 @@ function Poster({ url, title, style }) {
 }
 
 function QRCode({ value }) {
-  const url = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(value)}&bgcolor=13131A&color=F0EEE8&margin=10`;
-  return <img src={url} alt="QR Code" style={{ width: 180, height: 180, borderRadius: 12 }} />;
+  const url = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(value)}&bgcolor=FBF6EE&color=342A36&margin=10`;
+  return <img src={url} alt="QR code de la session" style={{ width: 180, height: 180, borderRadius: 12, border: `2px solid ${T.ink}`, boxShadow: `3px 3px 0 ${T.ink}` }} />;
 }
 
 function useSwipe(onSwipe) {
   const startX = useRef(null), currX = useRef(0), dragging = useRef(false);
   const [off, setOff] = useState(0), [rot, setRot] = useState(0), [ind, setInd] = useState(null), [out, setOut] = useState(null);
-  const go = liked => { setOut(liked ? "r" : "l"); setTimeout(() => onSwipe(liked), 300); };
+  const go = liked => { setOut(liked ? "r" : "l"); setTimeout(() => onSwipe(liked), 220); };
   const onStart = x => { startX.current = x; dragging.current = true; };
-  const onMove = (x, rf = 0.07) => {
+  const onMove = x => {
     if (!dragging.current) return;
-    const d = x - startX.current; currX.current = d; setOff(d); setRot(d * rf);
+    const d = x - startX.current; currX.current = d; setOff(d);
+    // Rotation plafonnee a 5 degres (charte)
+    setRot(Math.max(-5, Math.min(5, d * 0.04)));
     setInd(d > 50 ? "like" : d < -50 ? "nope" : null);
   };
   const onEnd = () => {
@@ -296,75 +374,84 @@ function useSwipe(onSwipe) {
     else { setOff(0); setRot(0); setInd(null); }
     startX.current = null; currX.current = 0;
   };
-  const tx = out === "r" ? "translateX(160%) rotate(28deg)" : out === "l" ? "translateX(-160%) rotate(-28deg)" : `translateX(${off}px) rotate(${rot}deg)`;
+  const tx = out === "r" ? "translateX(160%) rotate(5deg)" : out === "l" ? "translateX(-160%) rotate(-5deg)" : `translateX(${off}px) rotate(${rot}deg)`;
   return { tx, out, ind, onStart, onMove, onEnd };
 }
+
+const cardBase = {
+  position: "absolute", inset: 0, borderRadius: 16, overflow: "hidden",
+  background: T.paper, color: T.ink, border: `2px solid ${T.paper}`,
+  boxShadow: `4px 4px 0 ${T.coral}`, touchAction: "none", cursor: "grab", userSelect: "none",
+};
 
 function GenreCard({ genre, onSwipe }) {
   const { tx, out, ind, onStart, onMove, onEnd } = useSwipe(onSwipe);
   return (
-    <div style={{ transform: tx, transition: out ? "transform 0.3s ease" : "none", pointerEvents: out ? "none" : "auto", position: "absolute", inset: 0, borderRadius: 22, border: `1px solid ${genre.color}44`, background: `linear-gradient(145deg,${genre.color}12,${genre.color}28)`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, cursor: "grab", userSelect: "none", touchAction: "none", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}
-      onMouseDown={e => onStart(e.clientX)} onMouseMove={e => onMove(e.clientX, 0.08)} onMouseUp={onEnd} onMouseLeave={onEnd}
-      onTouchStart={e => onStart(e.touches[0].clientX)} onTouchMove={e => onMove(e.touches[0].clientX, 0.08)} onTouchEnd={onEnd}
+    <div style={{ ...cardBase, transform: tx, transition: out ? "transform 0.22s ease" : "none", pointerEvents: out ? "none" : "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}
+      onMouseDown={e => onStart(e.clientX)} onMouseMove={e => onMove(e.clientX)} onMouseUp={onEnd} onMouseLeave={onEnd}
+      onTouchStart={e => onStart(e.touches[0].clientX)} onTouchMove={e => onMove(e.touches[0].clientX)} onTouchEnd={onEnd}
     >
-      <Icon name={genre.icon} size={84} />
-      <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 36, color: genre.color, letterSpacing: "-1px" }}>{genre.name}</div>
-      <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 15 }}>{genre.desc}</div>
+      <Grain opacity={0.05} />
+      <Icon name={genre.icon} size={84} color={genre.color} />
+      <div style={{ fontFamily: T.display, fontSize: 34, lineHeight: 1.05, color: T.ink, textAlign: "center", padding: "0 16px" }}>{genre.name}</div>
+      <div style={{ color: "#5E5260", fontSize: 16 }}>{genre.desc}</div>
       {ind && <Ind type={ind} />}
     </div>
   );
 }
 
+const chipBtn = (on) => ({
+  background: on ? T.yellow : T.paper, border: `2px solid ${T.ink}`, color: T.ink,
+  cursor: "pointer", fontFamily: T.body, fontWeight: 700,
+});
+
 function MovieCard({ movie, onSwipe, onDetail, seenIds, onToggleSeen, wishlist = [], onToggleWishlist }) {
   const { tx, out, ind, onStart, onMove, onEnd } = useSwipe(onSwipe);
   const isSeen = seenIds.has(movie.id);
   const inList = wishlist.some(m => m.id === movie.id);
+  const stop = { onMouseDown: e => e.stopPropagation(), onTouchStart: e => e.stopPropagation() };
   return (
-    <div style={{ transform: tx, transition: out ? "transform 0.3s ease" : "none", pointerEvents: out ? "none" : "auto", position: "absolute", inset: 0, borderRadius: 22, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)", background: "#13131A", boxShadow: "0 28px 64px rgba(0,0,0,0.65)", touchAction: "none", cursor: "grab", userSelect: "none" }}
-      onMouseDown={e => onStart(e.clientX)} onMouseMove={e => onMove(e.clientX, 0.055)} onMouseUp={onEnd} onMouseLeave={onEnd}
-      onTouchStart={e => onStart(e.touches[0].clientX)} onTouchMove={e => { e.preventDefault(); onMove(e.touches[0].clientX, 0.055); }} onTouchEnd={onEnd}
+    <div style={{ ...cardBase, transform: tx, transition: out ? "transform 0.22s ease" : "none", pointerEvents: out ? "none" : "auto", display: "flex", flexDirection: "column" }}
+      onMouseDown={e => onStart(e.clientX)} onMouseMove={e => onMove(e.clientX)} onMouseUp={onEnd} onMouseLeave={onEnd}
+      onTouchStart={e => onStart(e.touches[0].clientX)} onTouchMove={e => { e.preventDefault(); onMove(e.touches[0].clientX); }} onTouchEnd={onEnd}
     >
-      <div style={{ position: "relative", height: 255 }}>
+      {/* Image paysage 16:9, sans texture */}
+      <div style={{ position: "relative", aspectRatio: "16 / 9", flexShrink: 0, borderBottom: `2px solid ${T.ink}` }}>
         <Poster url={movie.backdrop || movie.poster} title={movie.title} style={{ position: "absolute", inset: 0 }} />
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom,transparent 45%,#13131A 100%)" }} />
-        <button onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
-          onClick={e => { e.stopPropagation(); onToggleSeen(movie.id); }}
-          style={{ position: "absolute", top: 12, right: 12, background: isSeen ? "rgba(250,200,50,0.22)" : "rgba(0,0,0,0.55)", border: isSeen ? "1.5px solid rgba(250,200,50,0.65)" : "1px solid rgba(255,255,255,0.22)", borderRadius: 20, padding: "5px 12px", fontSize: 11, fontWeight: 700, color: isSeen ? "#FAC832" : "rgba(255,255,255,0.5)", cursor: "pointer", backdropFilter: "blur(8px)" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-            {isSeen && <Icon name="check" size={11} color="#FAC832" />}
-            {isSeen ? "Déjà vu" : "Déjà vu ?"}
-          </span>
-        </button>
         {onToggleWishlist && (
-          <button onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
-            onClick={e => { e.stopPropagation(); onToggleWishlist(movie); }}
-            aria-label={inList ? "Retirer de ma liste" : "Ajouter à ma liste"}
-            style={{ position: "absolute", top: 10, left: 12, width: 34, height: 34, borderRadius: "50%", background: inList ? "rgba(212,175,55,0.22)" : "rgba(0,0,0,0.55)", border: inList ? `1.5px solid ${T.accent}` : "1px solid rgba(255,255,255,0.22)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(8px)" }}>
-            <Icon name="bookmark" size={15} color={inList ? T.accent : "rgba(255,255,255,0.75)"} fill={inList} />
+          <button {...stop} onClick={e => { e.stopPropagation(); onToggleWishlist(movie); }}
+            aria-label={inList ? "Retirer de ma liste" : "Ajouter à ma liste"} aria-pressed={inList}
+            style={{ ...chipBtn(inList), position: "absolute", top: 10, left: 10, width: 40, height: 40, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name="bookmark" size={18} color={T.ink} fill={inList} />
           </button>
         )}
-        <div style={{ position: "absolute", bottom: 10, left: 12 }}>
-          <RatingBadge score={movie.imdb} />
-        </div>
+        <button {...stop} onClick={e => { e.stopPropagation(); onToggleSeen(movie.id); }} aria-pressed={isSeen}
+          style={{ ...chipBtn(isSeen), position: "absolute", top: 10, right: 10, height: 40, borderRadius: 999, padding: "0 14px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 5 }}>
+          {isSeen && <Icon name="check" size={13} color={T.ink} />}
+          {isSeen ? "Déjà vu" : "Déjà vu ?"}
+        </button>
       </div>
-      <div style={{ padding: "13px 16px 14px" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 7 }}>
+      <div style={{ position: "relative", padding: "14px 16px 16px", display: "flex", flexDirection: "column", gap: 8, minHeight: 0 }}>
+        <Grain opacity={0.05} />
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 18, letterSpacing: "-0.3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{movie.title}</div>
-            <div style={{ color: "rgba(255,255,255,0.32)", fontSize: 12, marginTop: 3 }}>{movie.year}</div>
+            <div style={{ fontFamily: T.display, fontSize: 22, lineHeight: 1.05, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{movie.title}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, fontSize: 14, color: "#5E5260" }}>
+              {movie.year && <span>{movie.year}</span>}
+              {movie.imdb && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 16, fontWeight: 700, color: T.ink }}><Icon name="star" size={15} color={T.coral} />{String(movie.imdb).replace(".", ",")}/10</span>}
+            </div>
           </div>
-          <button onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
-            onClick={e => { e.stopPropagation(); onDetail(); }}
-            style={{ flexShrink: 0, background: T.accentSoft, border: `1px solid ${T.border}`, borderRadius: 9, padding: "6px 12px", color: T.accent, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}>
-            + Info
+          <button {...stop} onClick={e => { e.stopPropagation(); onDetail(); }}
+            style={{ flexShrink: 0, background: "transparent", border: `2px solid ${T.blue}`, borderRadius: 10, height: 40, padding: "0 12px", color: T.blue, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: T.body }}>
+            Infos
           </button>
         </div>
-        <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 12.5, lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginBottom: movie.streamingOn?.length > 0 ? 8 : 0 }}>{movie.synopsis}</div>
+        <div style={{ color: T.ink, fontSize: 14, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{movie.synopsis}</div>
         {movie.streamingOn?.length > 0 && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {movie.streamingOn.map(p => (
-              <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, padding: "3px 8px", fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
-                {p.logo && <img src={p.logo} alt={p.name} style={{ width: 16, height: 16, borderRadius: 4, objectFit: "cover" }} />}
+              <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: T.surface, border: `1.5px solid rgba(52,42,54,0.25)`, borderRadius: 8, padding: "3px 8px 3px 4px", fontSize: 12, fontWeight: 600, color: T.ink }}>
+                {p.logo && <img src={p.logo} alt="" style={{ width: 20, height: 20, borderRadius: 5, objectFit: "cover" }} />}
                 {p.name}
               </span>
             ))}
@@ -378,75 +465,85 @@ function MovieCard({ movie, onSwipe, onDetail, seenIds, onToggleSeen, wishlist =
 
 function DetailPanel({ movie, onClose }) {
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 200, background: T.bg, overflowY: "auto" }}>
-      <div style={{ position: "relative", height: 320, overflow: "hidden" }}>
-        <Poster url={movie.backdrop || movie.poster} title={movie.title} style={{ position: "absolute", inset: 0, filter: "brightness(0.5)" }} />
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom,rgba(0,0,0,0.1) 30%,#0A0A0B 100%)" }} />
-        <button onClick={onClose} style={{ position: "absolute", top: 20, left: 20, background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 50, width: 40, height: 40, color: "#fff", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)" }} aria-label="Retour"><Icon name="back" size={20} color="#fff" /></button>
-        <div style={{ position: "absolute", bottom: 20, left: 20, right: 20 }}>
-          <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 24, lineHeight: 1.15, marginBottom: 10 }}>{movie.title}</div>
-          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-            <RatingBadge score={movie.imdb} />
-            {movie.year && <span style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 7, padding: "3px 8px", fontSize: 11, color: "rgba(255,255,255,0.55)" }}>{movie.year}</span>}
-          </div>
+    <div style={{ position: "fixed", inset: 0, zIndex: 200, background: T.paper, color: T.ink, overflowY: "auto" }}>
+      <div style={{ maxWidth: 440, margin: "0 auto" }}>
+        <div style={{ position: "relative", aspectRatio: "16 / 9", borderBottom: `2px solid ${T.ink}` }}>
+          <Poster url={movie.backdrop || movie.poster} title={movie.title} style={{ position: "absolute", inset: 0 }} />
+          <button onClick={onClose} aria-label="Retour" style={{ position: "absolute", top: 14, left: 14, ...chipBtn(false), borderRadius: 12, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="back" size={20} color={T.ink} /></button>
         </div>
-      </div>
-      <div style={{ padding: "20px 22px 48px" }}>
-        {movie.streamingOn?.length > 0 && (
-          <div style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2.5, color: T.accent, fontWeight: 700, marginBottom: 10 }}>Disponible sur</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {movie.streamingOn.map(p => (
-                <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "6px 12px", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.75)" }}>
-                  {p.logo && <img src={p.logo} alt={p.name} style={{ width: 20, height: 20, borderRadius: 5, objectFit: "cover" }} />}
-                  {p.name}
-                </span>
-              ))}
-            </div>
+        <div style={{ padding: "20px 20px 48px", position: "relative" }}>
+          <div style={{ fontFamily: T.display, fontSize: 26, lineHeight: 1.05, marginBottom: 12 }}>{movie.title}</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 18 }}>
+            <RatingBadge score={movie.imdb} />
+            {movie.year && <span style={{ fontSize: 14, color: "#5E5260" }}>{movie.year}</span>}
           </div>
-        )}
-        {movie.trailerKey && (
-          <a href={`https://www.youtube.com/watch?v=${movie.trailerKey}`} target="_blank" rel="noopener noreferrer"
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, width: "100%", background: T.accentSoft, border: `1px solid ${T.border}`, borderRadius: 14, padding: "13px 20px", color: T.accent, fontWeight: 700, fontSize: 14, textDecoration: "none", marginBottom: 18 }}>
-            <Icon name="play" size={16} color={T.accent} /> Voir la bande-annonce
-          </a>
-        )}
-        <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 15, lineHeight: 1.75 }}>{movie.synopsis}</p>
+          {movie.streamingOn?.length > 0 && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Disponible sur</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {movie.streamingOn.map(p => (
+                  <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 8, background: T.surface, border: `2px solid ${T.ink}`, borderRadius: 10, padding: "5px 12px 5px 6px", fontSize: 14, fontWeight: 600 }}>
+                    {p.logo && <img src={p.logo} alt="" style={{ width: 24, height: 24, borderRadius: 6, objectFit: "cover" }} />}
+                    {p.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {movie.trailerKey && (
+            <a href={`https://www.youtube.com/watch?v=${movie.trailerKey}`} target="_blank" rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, height: 56, background: T.coral, borderRadius: 12, color: T.white, fontWeight: 700, fontSize: 16, textDecoration: "none", marginBottom: 20, boxShadow: `3px 3px 0 ${T.ink}` }}>
+              <Icon name="play" size={18} color={T.white} /> Voir la bande-annonce
+            </a>
+          )}
+          <p style={{ fontSize: 16, lineHeight: 1.6 }}>{movie.synopsis}</p>
+        </div>
       </div>
     </div>
   );
 }
 
-function MatchModal({ item, type, onClose }) {
+function MatchModal({ item, type, solo, onClose }) {
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", backdropFilter: "blur(12px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}>
-      <div style={{ background: "#13131A", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 28, padding: "36px 28px", textAlign: "center", maxWidth: 340, width: "100%" }}>
-        <div style={{ fontSize: 52, marginBottom: 6 }}>🎉</div>
-        <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 28, color: T.accent, marginBottom: 18, letterSpacing: "-1px" }}>C'est un MATCH !</div>
-        {type === "genre" ? (
-          <>
-            <div style={{ marginBottom: 10 }}><Icon name={item.icon} size={56} /></div>
-            <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 22, marginBottom: 6 }}>{item.name}</div>
-            <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 14, marginBottom: 24 }}>Vous aimez tous les deux ce genre !</div>
-          </>
-        ) : (
-          <>
-            <div style={{ width: 110, height: 150, borderRadius: 12, overflow: "hidden", margin: "0 auto 14px", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
-              <Poster url={item.poster} title={item.title} style={{ width: "100%", height: "100%" }} />
-            </div>
-            <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 19, marginBottom: 8 }}>{item.title}</div>
-            <RatingBadge score={item.imdb} />
-            <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 14, margin: "12px 0 24px" }}>
-              Ce soir : <strong style={{ color: "rgba(255,255,255,0.8)" }}>{item.title}</strong> !
-            </div>
-          </>
-        )}
-        <button onClick={onClose} style={{ background: T.btnGrad, color: T.accentDark, border: "none", borderRadius: 14, padding: "15px 24px", fontSize: 16, fontWeight: 700, cursor: "pointer", width: "100%", fontFamily: T.body, marginBottom: type === "movie" ? 10 : 0 }}>
-          {type === "genre" ? "Continuer →" : "C'est parti !"}
-        </button>
-        {type === "movie" && (
-          <ShareMatchButton title={item.title} />
-        )}
+    <div style={{ position: "fixed", inset: 0, background: "rgba(43,35,48,0.82)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 16, overflowY: "auto" }}>
+      <div role="dialog" aria-modal="true" aria-label="C'est un match" className="cm-pop" style={{ position: "relative", overflow: "hidden", background: T.paper, color: T.ink, border: `2px solid ${T.ink}`, borderRadius: 18, boxShadow: `5px 5px 0 ${T.coral}`, padding: "24px 22px 22px", textAlign: "center", maxWidth: 360, width: "100%" }}>
+        <Grain opacity={0.14} />
+        <div style={{ position: "relative" }}>
+          <div style={{ display: "flex", justifyContent: "center" }}><Matches size={150} animate /></div>
+          <div style={{ fontFamily: T.display, fontSize: 32, lineHeight: 1.05, color: T.coral, marginTop: 8 }}>C'est un match !</div>
+          <div style={{ fontSize: 18, fontWeight: 600, color: T.blue, marginTop: 6, marginBottom: 18 }}>Deux envies. Une étincelle.</div>
+          {type === "genre" ? (
+            <>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}><Icon name={item.icon} size={56} color={item.color} /></div>
+              <div style={{ fontFamily: T.display, fontSize: 22, marginBottom: 6 }}>{item.name}</div>
+              <div style={{ fontSize: 16, marginBottom: 22 }}>{solo ? "Ce genre vous tente ce soir." : "Vous aimez tous les deux ce genre."}</div>
+              <button onClick={onClose} style={{ height: 56, width: "100%", border: "none", borderRadius: 12, background: T.coral, color: T.white, fontFamily: T.body, fontWeight: 700, fontSize: 16, cursor: "pointer", boxShadow: `3px 3px 0 ${T.ink}` }}>Continuer</button>
+            </>
+          ) : (
+            <>
+              <div className="cm-poster" style={{ width: 132, height: 198, borderRadius: 12, overflow: "hidden", margin: "0 auto 14px", border: `2px solid ${T.ink}`, boxShadow: `3px 3px 0 ${T.ink}`, transform: "rotate(2deg)" }}>
+                <Poster url={item.poster} title={item.title} style={{ width: "100%", height: "100%" }} />
+              </div>
+              <div style={{ fontFamily: T.display, fontSize: 21, lineHeight: 1.05, marginBottom: 8 }}>{item.title}</div>
+              <div style={{ fontSize: 14, marginBottom: 10 }}>
+                {[item.year, item.imdb ? `${String(item.imdb).replace(".", ",")}/10` : null].filter(Boolean).join(" · ")}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.4, marginBottom: 18 }}>
+                {solo ? "Ce film vous plaît. Bonne pioche." : "Vous avez aimé le même film. Comme quoi, vous avez plutôt bon goût tous les deux."}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {item.trailerKey && (
+                  <a href={`https://www.youtube.com/watch?v=${item.trailerKey}`} target="_blank" rel="noopener noreferrer"
+                    style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, height: 56, background: T.coral, borderRadius: 12, color: T.white, fontWeight: 700, fontSize: 16, textDecoration: "none", boxShadow: `3px 3px 0 ${T.ink}` }}>
+                    <Icon name="play" size={16} color={T.white} /> Voir la bande-annonce
+                  </a>
+                )}
+                <ShareMatchButton title={item.title} />
+                <button onClick={onClose} style={{ height: 48, border: "none", borderRadius: 12, background: T.yellow, color: T.ink, fontFamily: T.body, fontWeight: 700, fontSize: 16, cursor: "pointer" }}>Terminer</button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -468,16 +565,17 @@ function ShareMatchButton({ title }) {
       setCopied(true); setTimeout(() => setCopied(false), 2000);
     });
   };
+  const c = copied ? T.green : T.blue;
   return (
-    <button onClick={share} style={{ background: copied ? "rgba(74,222,128,0.1)" : "rgba(255,255,255,0.06)", color: copied ? "#4ADE80" : "rgba(255,255,255,0.5)", border: copied ? "1px solid rgba(74,222,128,0.3)" : "1px solid rgba(255,255,255,0.1)", borderRadius: 14, padding: "12px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer", width: "100%", fontFamily: "DM Sans, sans-serif", transition: "all 0.2s" }}>
-      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}><Icon name={copied ? "check" : "share"} size={16} color={copied ? "#4ADE80" : "rgba(255,255,255,0.6)"} />{copied ? "Lien copié" : "Partager le match"}</span>
+    <button onClick={share} style={{ height: 56, width: "100%", background: "transparent", color: c, border: `2px solid ${c}`, borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: T.body }}>
+      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}><Icon name={copied ? "check" : "share"} size={18} color={c} />{copied ? "Lien copié" : "Partager le match"}</span>
     </button>
   );
 }
 
 function AlertIcon({ size = 22 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#E8807C" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }}>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }}>
       <circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5" /><path d="M12 16.5h.01" />
     </svg>
   );
@@ -485,34 +583,32 @@ function AlertIcon({ size = 22 }) {
 
 function ErrorBox({ title, children }) {
   return (
-    <div role="alert" style={{ display: "flex", gap: 14, alignItems: "flex-start", background: "rgba(217,83,79,0.08)", border: "1px solid rgba(217,83,79,0.35)", borderRadius: 14, padding: 16, marginBottom: 16, textAlign: "left" }}>
+    <div role="alert" style={{ display: "flex", gap: 14, alignItems: "flex-start", background: T.surface, border: `2px solid ${T.red}`, borderRadius: 12, padding: 16, marginBottom: 16, textAlign: "left" }}>
       <AlertIcon />
       <div>
-        <div style={{ fontWeight: 600, fontSize: 15, color: T.text, marginBottom: 4 }}>{title}</div>
-        <div style={{ fontSize: 13.5, lineHeight: 1.55, color: T.textMid }}>{children}</div>
+        <div style={{ fontWeight: 700, fontSize: 16, color: T.ink, marginBottom: 4 }}>{title}</div>
+        <div style={{ fontSize: 14, lineHeight: 1.5, color: T.ink }}>{children}</div>
       </div>
     </div>
   );
 }
 
-function swipeBtn(like) {
-  return {
-    width: 64, height: 64, borderRadius: "50%", cursor: "pointer",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    background: like ? T.accentSoft : T.card,
-    border: like ? `1.5px solid ${T.border}` : `1.5px solid ${T.red}55`,
-  };
+// Boutons de swipe : « je passe » en contour neutre, « j'aime » en corail
+function swipeBtn(like, C) {
+  return like
+    ? { width: 64, height: 64, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: T.coral, border: "none", boxShadow: `3px 3px 0 ${C.dark ? T.yellow : T.ink}` }
+    : { width: 64, height: 64, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: `2.5px solid ${C.ink}` };
 }
 
-function LegalScreen({ onBack }) {
-  const H = ({ children }) => <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2, color: T.accent, fontWeight: 700, margin: "24px 0 8px" }}>{children}</div>;
-  const P = ({ children }) => <p style={{ color: T.textMid, fontSize: 13.5, lineHeight: 1.7, marginBottom: 8 }}>{children}</p>;
-  const A = ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: T.accent }}>{children}</a>;
+function LegalScreen({ onBack, C }) {
+  const H = ({ children }) => <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.ink, fontWeight: 700, margin: "24px 0 8px" }}>{children}</div>;
+  const P = ({ children }) => <p style={{ color: C.ink, fontSize: 14, lineHeight: 1.6, marginBottom: 8 }}>{children}</p>;
+  const A = ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: T.blue, fontWeight: 600 }}>{children}</a>;
   return (
     <div style={{ paddingTop: 20, paddingBottom: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 22 }}>Mentions légales</div>
-        <button onClick={onBack} style={{ background: "none", border: "none", color: T.sub, fontSize: 13, cursor: "pointer", fontFamily: T.body }}>← Retour</button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, gap: 12 }}>
+        <div style={{ fontFamily: T.display, fontSize: 24, lineHeight: 1.05 }}>Mentions légales</div>
+        <BackLink onClick={onBack} C={C} />
       </div>
 
       <H>Éditeur</H>
@@ -524,9 +620,9 @@ function LegalScreen({ onBack }) {
       <P>Base de données des sessions : Supabase Inc., San Francisco, États-Unis.</P>
 
       <H>Données collectées</H>
-      <P><strong style={{ color: T.text }}>Sur votre appareil.</strong> Votre liste, vos films déjà vus, vos plateformes et vos réglages Mood sont enregistrés uniquement dans le stockage local de votre navigateur. Ils ne quittent pas votre appareil. Vous pouvez les effacer à tout moment depuis l'app ou en vidant les données du site.</P>
-      <P><strong style={{ color: T.text }}>Pendant une session à deux.</strong> Le prénom saisi, le code de session et vos votes (genres et films) sont enregistrés sur Supabase pour permettre la synchronisation en temps réel. Ces données sont supprimées automatiquement au bout de 30 jours.</P>
-      <P><strong style={{ color: T.text }}>Mesure d'audience.</strong> Des statistiques d'usage anonymes (par exemple « session créée », « match trouvé ») sont envoyées à PostHog, hébergé dans l'Union européenne. Aucun cookie n'est déposé, aucun nom ni e-mail n'est collecté, aucune donnée n'est revendue ni utilisée à des fins publicitaires. Ces mesures servent uniquement à améliorer l'app.</P>
+      <P><strong>Sur votre appareil.</strong> Votre liste, vos films déjà vus, vos plateformes et vos réglages Mood sont enregistrés uniquement dans le stockage local de votre navigateur. Ils ne quittent pas votre appareil. Vous pouvez les effacer à tout moment depuis l'app ou en vidant les données du site.</P>
+      <P><strong>Pendant une session à deux.</strong> Le prénom saisi, le code de session et vos votes (genres et films) sont enregistrés sur Supabase pour permettre la synchronisation en temps réel. Ces données sont supprimées automatiquement au bout de 30 jours.</P>
+      <P><strong>Mesure d'audience.</strong> Des statistiques d'usage anonymes (par exemple « session créée », « match trouvé ») sont envoyées à PostHog, hébergé dans l'Union européenne. Aucun cookie n'est déposé, aucun nom ni e-mail n'est collecté, aucune donnée n'est revendue ni utilisée à des fins publicitaires. Ces mesures servent uniquement à améliorer l'app.</P>
       <P>Conformément au RGPD, vous pouvez demander l'accès à vos données ou leur suppression via le contact ci-dessus.</P>
 
       <H>Crédits</H>
@@ -534,6 +630,14 @@ function LegalScreen({ onBack }) {
       <P>Disponibilités sur les plateformes de streaming : <A href="https://www.justwatch.com">JustWatch</A>.</P>
       <P>Les affiches, images et marques des films et des plateformes appartiennent à leurs détenteurs respectifs.</P>
     </div>
+  );
+}
+
+function BackLink({ onClick, C }) {
+  return (
+    <button onClick={onClick} style={{ background: "none", border: "none", color: C.link, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: T.body, display: "inline-flex", alignItems: "center", gap: 4, minHeight: 44, flexShrink: 0 }}>
+      <Icon name="back" size={16} color={C.link} /> Retour
+    </button>
   );
 }
 
@@ -1068,34 +1172,67 @@ useEffect(() => {
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [sessionId]);
-  
-  const Btn = ({ onClick, children, outline, disabled }) => (
-    <button onClick={onClick} disabled={disabled} style={{ background: outline ? "transparent" : T.btnGrad, color: outline ? T.text : T.accentDark, border: outline ? `1.5px solid ${T.borderSoft}` : "none", borderRadius: 14, padding: "15px 24px", fontSize: 15, fontWeight: outline ? 600 : 700, cursor: disabled ? "default" : "pointer", width: "100%", fontFamily: T.body, marginBottom: 10, opacity: disabled ? 0.4 : 1 }}>{children}</button>
-  );
 
-  const inputStyle = { width: "100%", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "13px 15px", color: "#F0EEE8", fontSize: 15, fontFamily: "DM Sans, sans-serif", outline: "none", marginBottom: 12 };
+  // Ecrans de swipe en version « soir » (fond aubergine), le reste sur papier creme
+  const C = ["genre", "movie", "loading"].includes(screen) ? DARK : LIGHT;
+  // La barre d'etat du telephone suit la couleur de fond de l'ecran
+  useEffect(() => {
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", C.bg);
+  }, [C.bg]);
+
+  // Boutons : principal (corail), secondaire (contour bleu, creme le soir), discret (jaune)
+  const Btn = ({ onClick, children, outline, tertiary, disabled }) => {
+    const base = { width: "100%", height: tertiary ? 48 : 56, borderRadius: 12, fontSize: 16, fontWeight: 700, fontFamily: T.body, cursor: disabled ? "default" : "pointer", marginBottom: 12, opacity: disabled ? 0.45 : 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 20px" };
+    const v = tertiary
+      ? { background: T.yellow, color: T.ink, border: "none" }
+      : outline
+        ? { background: "transparent", color: C.dark ? T.paper : T.blue, border: `2px solid ${C.dark ? T.paper : T.blue}` }
+        : { background: T.coral, color: T.white, border: "none", boxShadow: disabled ? "none" : `3px 3px 0 ${C.dark ? T.yellow : T.ink}` };
+    return <button className="cm-btn" onClick={onClick} disabled={disabled} style={{ ...base, ...v }}>{children}</button>;
+  };
+
+  const inputStyle = { width: "100%", height: 52, background: T.surface, border: `2px solid ${T.ink}`, borderRadius: 10, padding: "0 15px", color: T.ink, fontSize: 16, fontFamily: T.body, marginBottom: 12 };
+  const eyebrow = { fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, color: C.ink, fontWeight: 700 };
+  const h2 = { fontFamily: T.display, fontSize: 26, lineHeight: 1.05, color: C.ink };
+  const linkBtn = (active) => ({ background: "none", border: "none", color: active ? T.coral : T.blue, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: T.body, textDecoration: "underline", textUnderlineOffset: 3, minHeight: 44, padding: "0 4px" });
+  const listRow = { display: "flex", alignItems: "center", gap: 12, background: T.surface, border: `2px solid ${T.ink}`, borderRadius: 12, padding: "10px 12px" };
+  const removeBtn = { background: "transparent", border: `2px solid ${T.ink}`, borderRadius: 10, width: 44, height: 44, cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" };
+  const stackBehind = (n) => ({ position: "absolute", inset: 0, borderRadius: 16, background: n === 2 ? "rgba(244,235,221,0.08)" : "rgba(244,235,221,0.16)", border: "2px solid rgba(244,235,221,0.2)", transform: n === 2 ? "scale(0.9) translateY(18px)" : "scale(0.95) translateY(9px)" });
 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Bowlby+One+SC&family=Karla:wght@400;500;600;700&display=swap');
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-        body{background:#0A0A0B;color:#F5F0E6;font-family:'DM Sans',sans-serif;min-height:100vh}
-        ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:4px}
-        @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+        body{background:${C.bg};color:${C.ink};font-family:'Karla',sans-serif;min-height:100vh;transition:background 0.22s}
+        input::placeholder{color:#6E6270}
+        :focus-visible{outline:3px solid ${C.dark ? T.yellow : T.ink};outline-offset:2px}
+        .cm-btn:active:not(:disabled){transform:translate(2px,2px);box-shadow:none !important}
+        ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:rgba(52,42,54,0.2);border-radius:4px}
+        @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
         @keyframes pulse{0%,100%{transform:scale(1);opacity:0.4}50%{transform:scale(1.4);opacity:1}}
-        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes cmLeft{from{transform:translateX(-60px);opacity:0}to{transform:none;opacity:1}}
+        @keyframes cmRight{from{transform:translateX(60px);opacity:0}to{transform:none;opacity:1}}
+        @keyframes cmSpark{0%,55%{opacity:0;transform:scale(0.4)}100%{opacity:1;transform:scale(1)}}
+        @keyframes cmPop{from{transform:scale(0.94);opacity:0}to{transform:none;opacity:1}}
+        @keyframes cmPoster{from{transform:rotate(-6deg) translateY(16px);opacity:0}to{transform:rotate(2deg);opacity:1}}
+        .cm-left{animation:cmLeft 0.36s ease-out both}
+        .cm-right{animation:cmRight 0.36s ease-out both}
+        .cm-spark{transform-origin:90px 40px;animation:cmSpark 0.6s ease-out both}
+        .cm-pop{animation:cmPop 0.22s ease-out both}
+        .cm-poster{animation:cmPoster 0.6s ease-out both}
+        @media (prefers-reduced-motion: reduce){.cm-left,.cm-right,.cm-spark,.cm-pop,.cm-poster{animation:none}}
       `}</style>
 
-      <div style={{ minHeight: "100vh", background: T.bgGrad, display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <div style={{ position: "fixed", inset: 0, pointerEvents: "none", background: "radial-gradient(ellipse at 20% 20%,rgba(212,175,55,0.06) 0%,transparent 55%),radial-gradient(ellipse at 80% 80%,rgba(212,175,55,0.04) 0%,transparent 55%)" }} />
+      <div style={{ minHeight: "100vh", background: C.bg, color: C.ink, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", transition: "background 0.22s" }}>
+        <div style={{ position: "fixed", inset: 0, pointerEvents: "none" }}><Grain opacity={C.dark ? 0.06 : 0.035} dark={C.dark} /></div>
 
         {/* Header */}
-        <div style={{ width: "100%", maxWidth: 440, padding: "22px 20px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", zIndex: 1 }}>
-          <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 24, letterSpacing: "-1px" }}>Ciné<span style={{ color: T.accent }}>Match</span></div>
+        <div style={{ width: "100%", maxWidth: 440, padding: "18px 20px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", zIndex: 1 }}>
+          <Wordmark C={C} />
           {screen !== "home" && (
-            <div style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 100, padding: "5px 14px", fontSize: 12, color: partnerConnected ? "#4ADE80" : "rgba(255,255,255,0.4)", display: "flex", alignItems: "center", gap: 6 }}>
-              {partnerConnected && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ADE80" }} />}
+            <div style={{ border: `2px solid ${C.line}`, borderRadius: 999, padding: "5px 12px", fontSize: 13, fontWeight: 600, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>
+              {partnerConnected && <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.dark ? T.yellow : T.green }} />}
               {partnerConnected ? partnerName : (isSolo ? "Solo" : "En attente…")}
             </div>
           )}
@@ -1105,60 +1242,47 @@ useEffect(() => {
 
           {/* HOME */}
           {screen === "home" && (
-            <div style={{ textAlign: "center", paddingTop: 36 }}>
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 18, animation: "float 3s ease-in-out infinite" }}><Icon name="clap" size={72} /></div>
-              <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 36, lineHeight: 1.1, marginBottom: 12, letterSpacing: "-2px" }}>Trouvez votre<br /><span style={{ color: T.accent }}>film ce soir</span></div>
-              <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 15, marginBottom: 36, lineHeight: 1.6 }}>Swipez ensemble, matchez sur le même film.</div>
+            <div style={{ paddingTop: 12, padding: "12px 4px 0" }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 14, animation: "float 3.5s ease-in-out infinite" }}><Matches size={170} /></div>
+              <h1 style={{ fontFamily: T.display, fontWeight: 400, fontSize: 36, lineHeight: 1.05, marginBottom: 12 }}>Ce soir, on regarde quoi ?</h1>
+              <div style={{ fontSize: 16, lineHeight: 1.5, marginBottom: 28 }}>Deux envies, quelques films, et une étincelle à trouver.</div>
               <Btn onClick={() => { setCreateError(null); setScreen("create"); }}>Créer une session</Btn>
               <Btn outline onClick={() => { setJoinError(null); setScreen("join"); }}>Rejoindre une session</Btn>
-              <div style={{ height: 8 }} />
-              <Btn outline onClick={() => { track("solo_started"); setScreen("genre"); }}>Mode solo</Btn>
-              <div style={{ height: 4 }} />
-              <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 4 }}>
-                <button onClick={() => setScreen("mood")} style={{ background: "none", border: "none", color: isMoodActive(mood) ? T.accent : "rgba(255,255,255,0.35)", fontSize: 13, cursor: "pointer", fontFamily: T.body, textDecoration: "underline" }}>
-                  Mood{isMoodActive(mood) ? " •" : ""}
-                </button>
-                <span style={{ color: "rgba(255,255,255,0.15)" }}>·</span>
-                <button onClick={() => setScreen("providers")} style={{ background: "none", border: "none", color: selectedProviders.length > 0 ? T.accent : "rgba(255,255,255,0.35)", fontSize: 13, cursor: "pointer", fontFamily: T.body, textDecoration: "underline" }}>
-                  Plateformes{selectedProviders.length > 0 ? ` (${selectedProviders.length})` : ""}
-                </button>
-                <span style={{ color: "rgba(255,255,255,0.15)" }}>·</span>
-                <button onClick={() => setScreen("wishlist")} style={{ background: "none", border: "none", color: wishlist.length > 0 ? T.accent : "rgba(255,255,255,0.35)", fontSize: 13, cursor: "pointer", fontFamily: T.body, textDecoration: "underline" }}>
-                  Ma liste{wishlist.length > 0 ? ` (${wishlist.length})` : ""}
-                </button>
-                <span style={{ color: "rgba(255,255,255,0.15)" }}>·</span>
-                <button onClick={() => setScreen("seen")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 13, cursor: "pointer", fontFamily: T.body, textDecoration: "underline" }}>
-                  Déjà vus{seenIds.size > 0 ? ` (${seenIds.size})` : ""}
-                </button>
+              <Btn tertiary onClick={() => { track("solo_started"); setScreen("genre"); }}>Mode solo</Btn>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center", marginTop: 4 }}>
+                <button onClick={() => setScreen("mood")} style={linkBtn(isMoodActive(mood))}>Mood{isMoodActive(mood) ? " (actif)" : ""}</button>
+                <button onClick={() => setScreen("providers")} style={linkBtn(selectedProviders.length > 0)}>Plateformes{selectedProviders.length > 0 ? ` (${selectedProviders.length})` : ""}</button>
+                <button onClick={() => setScreen("wishlist")} style={linkBtn(false)}>Ma liste{wishlist.length > 0 ? ` (${wishlist.length})` : ""}</button>
+                <button onClick={() => setScreen("seen")} style={linkBtn(false)}>Déjà vus{seenIds.size > 0 ? ` (${seenIds.size})` : ""}</button>
               </div>
 
               {/* Attribution TMDB (requise par les conditions d'utilisation de l'API) */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 26, paddingTop: 16, borderTop: `1px solid ${T.borderSoft}` }}>
-                <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
+              <div style={{ textAlign: "center", marginTop: 22, paddingTop: 16, borderTop: `2px solid ${C.line}` }}>
+                <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
                   <img
                     src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg"
                     alt="TMDB"
-                    style={{ height: 11, opacity: 0.55 }}
+                    style={{ height: 11 }}
                   />
-                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.28)", lineHeight: 1.5, maxWidth: 250 }}>
+                  <span style={{ fontSize: 12, color: C.sub, lineHeight: 1.5, maxWidth: 260, textAlign: "left" }}>
                     Ce produit utilise l'API TMDB mais n'est ni approuvé ni certifié par TMDB.
                   </span>
                 </a>
+                <div style={{ fontSize: 12, color: C.sub, marginTop: 6 }}>
+                  Disponibilités sur les plateformes : <a href="https://www.justwatch.com" target="_blank" rel="noopener noreferrer" style={{ color: C.sub }}>JustWatch</a>
+                </div>
+                <button onClick={() => setScreen("legal")} style={{ ...linkBtn(false), color: C.sub, fontSize: 12, fontWeight: 600 }}>
+                  Mentions légales et confidentialité
+                </button>
               </div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.28)", marginTop: 6 }}>
-                Disponibilités sur les plateformes : <a href="https://www.justwatch.com" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(255,255,255,0.4)" }}>JustWatch</a>
-              </div>
-              <button onClick={() => setScreen("legal")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 11, cursor: "pointer", fontFamily: T.body, textDecoration: "underline", marginTop: 8 }}>
-                Mentions légales et confidentialité
-              </button>
             </div>
           )}
 
           {/* CREATE SESSION */}
           {screen === "create" && (
-            <div style={{ paddingTop: 36 }}>
-              <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 25, marginBottom: 6 }}>Nouvelle session</div>
-              <div style={{ color: "rgba(255,255,255,0.33)", fontSize: 14, marginBottom: 26 }}>Entrez votre prénom</div>
+            <div style={{ paddingTop: 28 }}>
+              <div style={{ ...h2, marginBottom: 8 }}>Nouvelle session</div>
+              <div style={{ fontSize: 16, marginBottom: 22 }}>Entrez votre prénom, puis invitez votre partenaire de canapé.</div>
               <input placeholder="Votre prénom" aria-label="Votre prénom" value={myName} onChange={e => setMyName(e.target.value)} style={inputStyle} />
               {createError === "network" && (
                 <ErrorBox title="Connexion impossible">Le service est momentanément indisponible. Réessayez dans une minute.</ErrorBox>
@@ -1170,14 +1294,15 @@ useEffect(() => {
 
           {/* WAITING FOR PARTNER */}
           {screen === "waiting" && (
-            <div style={{ paddingTop: 36, textAlign: "center" }}>
-              <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 22, marginBottom: 8 }}>Invitez votre partenaire</div>
-              <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 14, marginBottom: 28 }}>Partagez ce code ou ce lien</div>
+            <div style={{ paddingTop: 24, textAlign: "center" }}>
+              <div style={{ ...h2, marginBottom: 8 }}>Invitez votre partenaire</div>
+              <div style={{ fontSize: 16, marginBottom: 22 }}>Partagez ce code ou ce lien.</div>
 
               {/* Big code */}
-              <div style={{ background: T.accentSoft, border: `1px solid ${T.border}`, borderRadius: 18, padding: "20px 24px", marginBottom: 20 }}>
-                <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 2, color: T.accent, marginBottom: 8 }}>Code de session</div>
-                <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 42, letterSpacing: 8, color: T.accent }}>{sessionCode}</div>
+              <div style={{ position: "relative", overflow: "hidden", background: T.yellow, border: `2px solid ${T.ink}`, borderRadius: 16, boxShadow: `3px 3px 0 ${T.ink}`, padding: "16px 20px", marginBottom: 20 }}>
+                <Grain opacity={0.12} />
+                <div style={{ position: "relative", fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 6 }}>Code de session</div>
+                <div style={{ position: "relative", fontFamily: T.display, fontSize: 40, letterSpacing: 6 }}>{sessionCode}</div>
               </div>
 
               {/* QR Code */}
@@ -1185,30 +1310,29 @@ useEffect(() => {
                 <QRCode value={`${window.location.origin}?join=${sessionCode}`} />
               </div>
 
-              {/* Copy link button */}
-              <button onClick={copyLink} style={{ background: copied ? "rgba(74,222,128,0.15)" : "rgba(255,255,255,0.07)", color: copied ? "#4ADE80" : "rgba(255,255,255,0.6)", border: copied ? "1px solid rgba(74,222,128,0.4)" : "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "12px 20px", fontSize: 14, cursor: "pointer", fontFamily: "DM Sans, sans-serif", width: "100%", marginBottom: 12 }}>
-                {copied ? "Lien copié" : "Copier le lien"}
-              </button>
+              <Btn outline onClick={copyLink}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>{copied && <Icon name="check" size={16} color={T.blue} />}{copied ? "Lien copié" : "Copier le lien"}</span>
+              </Btn>
 
               {/* Waiting indicator */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: "rgba(255,255,255,0.35)", fontSize: 14, marginTop: 16 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#FFB347", animation: "pulse 1.5s ease-in-out infinite" }} />
-                En attente de votre partenaire…
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontSize: 16, marginTop: 10 }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: T.coral, animation: "pulse 1.5s ease-in-out infinite" }} />
+                Votre partenaire de canapé arrive…
               </div>
             </div>
           )}
 
           {/* JOIN SESSION */}
           {screen === "join" && (
-            <div style={{ paddingTop: 36 }}>
-              <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 25, marginBottom: 6 }}>Rejoindre une session</div>
-              <div style={{ color: "rgba(255,255,255,0.33)", fontSize: 14, marginBottom: 26 }}>Entrez le code partagé par votre partenaire</div>
+            <div style={{ paddingTop: 28 }}>
+              <div style={{ ...h2, marginBottom: 8 }}>Rejoindre une session</div>
+              <div style={{ fontSize: 16, marginBottom: 22 }}>Entrez le code partagé par votre partenaire.</div>
               <input placeholder="Votre prénom" aria-label="Votre prénom" value={myName} onChange={e => setMyName(e.target.value)} style={inputStyle} />
-              <input placeholder="Code de session (ex : ABC123)" aria-label="Code de session" aria-invalid={joinError === "notfound"} value={joinCode} onChange={e => { setJoinCode(e.target.value.toUpperCase()); if (joinError) setJoinError(null); }}
-                style={{ ...inputStyle, fontFamily: T.display, fontWeight: 700, fontSize: 20, letterSpacing: 4, textAlign: "center", ...(joinError === "notfound" ? { border: `1.5px solid ${T.red}`, background: "rgba(217,83,79,0.06)", marginBottom: 8 } : {}) }} />
+              <input placeholder="Code (ex : ABC123)" aria-label="Code de session" aria-invalid={joinError === "notfound"} value={joinCode} onChange={e => { setJoinCode(e.target.value.toUpperCase()); if (joinError) setJoinError(null); }}
+                style={{ ...inputStyle, height: 60, fontFamily: T.display, fontSize: 22, letterSpacing: 4, textAlign: "center", ...(joinError === "notfound" ? { border: `2px solid ${T.red}`, marginBottom: 8 } : {}) }} />
               {joinError === "notfound" && (
-                <div role="alert" style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13.5, lineHeight: 1.5, color: "#E8807C", marginBottom: 18 }}>
-                  <AlertIcon size={16} />
+                <div role="alert" style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 14, lineHeight: 1.5, color: T.red, fontWeight: 600, marginBottom: 18 }}>
+                  <AlertIcon size={18} />
                   <span>Ce code ne correspond à aucune session. Vérifiez-le auprès de votre partenaire.</span>
                 </div>
               )}
@@ -1222,12 +1346,12 @@ useEffect(() => {
 
           {/* LOADING */}
           {screen === "loading" && (
-            <div style={{ textAlign: "center", paddingTop: 80 }}>
-              <div style={{ marginBottom: 20, animation: "float 2s ease-in-out infinite" }}><Icon name={selGenre?.icon || "clap"} size={64} /></div>
-              <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 20, marginBottom: 8 }}>Chargement des films…</div>
-              <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 14, marginBottom: 28 }}>Recherche en cours sur TMDB</div>
-              <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                {[0, 1, 2, 3, 4].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: T.accent, animation: `pulse 1.2s ${i * 0.2}s ease-in-out infinite` }} />)}
+            <div style={{ textAlign: "center", paddingTop: 72 }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 20, animation: "float 2s ease-in-out infinite" }}><Matches size={140} ink={T.paper} /></div>
+              <div style={{ fontFamily: T.display, fontSize: 24, lineHeight: 1.05, marginBottom: 10 }}>On craque une allumette…</div>
+              <div style={{ color: C.mid, fontSize: 16, marginBottom: 28 }}>Recherche des films{selGenre ? ` · ${selGenre.name}` : ""}</div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                {[0, 1, 2, 3, 4].map(i => <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: T.yellow, animation: `pulse 1.2s ${i * 0.2}s ease-in-out infinite` }} />)}
               </div>
             </div>
           )}
@@ -1235,60 +1359,57 @@ useEffect(() => {
           {/* GENRE SWIPE */}
           {screen === "genre" && !genreDone && !genreMatch && (
             <div>
-              <div style={{ paddingTop: 14, marginBottom: 14 }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2.5, color: T.accent, fontWeight: 700, marginBottom: 6 }}>Étape 1 · Genres</div>
+              <div style={{ paddingTop: 10, marginBottom: 14 }}>
+                <div style={{ ...eyebrow, marginBottom: 8 }}>Étape 1 · Genres</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ flex: 1, height: 2.5, background: "rgba(255,255,255,0.07)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ height: "100%", background: T.accent, borderRadius: 3, width: `${(genreIdx / GENRES.length) * 100}%`, transition: "width 0.3s" }} />
+                  <div style={{ flex: 1, height: 8, background: C.soft, borderRadius: 999, overflow: "hidden" }}>
+                    <div style={{ height: "100%", background: T.yellow, borderRadius: 999, width: `${(genreIdx / GENRES.length) * 100}%`, transition: "width 0.22s" }} />
                   </div>
-                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.25)" }}>{genreIdx}/{GENRES.length}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{genreIdx} / {GENRES.length}</div>
                 </div>
               </div>
               {partnerConnected && (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "9px 14px", marginBottom: 14, fontSize: 13, color: "rgba(255,255,255,0.38)" }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ADE80", flexShrink: 0 }} />
-                  <span><strong style={{ color: "rgba(255,255,255,0.6)" }}>{partnerName}</strong> est connecté et swipe en même temps</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, border: `2px solid ${C.line}`, borderRadius: 12, padding: "9px 14px", marginBottom: 14, fontSize: 14, color: C.mid }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.yellow, flexShrink: 0 }} />
+                  <span><strong style={{ color: C.ink }}>{partnerName}</strong> swipe en même temps que vous</span>
                 </div>
               )}
-              <div style={{ position: "relative", height: 300, marginBottom: 22 }}>
-                {genreIdx + 2 < GENRES.length && <div style={{ position: "absolute", inset: 0, borderRadius: 22, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", transform: "scale(0.88) translateY(16px)" }} />}
-                {genreIdx + 1 < GENRES.length && <div style={{ position: "absolute", inset: 0, borderRadius: 22, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", transform: "scale(0.94) translateY(8px)" }} />}
+              <div style={{ position: "relative", height: 320, marginBottom: 24 }}>
+                {genreIdx + 2 < GENRES.length && <div style={stackBehind(2)} />}
+                {genreIdx + 1 < GENRES.length && <div style={stackBehind(1)} />}
                 <GenreCard key={genreIdx} genre={GENRES[genreIdx]} onSwipe={onGenreSwipe} />
               </div>
-              <div style={{ display: "flex", justifyContent: "center", gap: 22, marginBottom: 14 }}>
-                <button onClick={() => onGenreSwipe(false)} aria-label="Je n'aime pas" style={swipeBtn(false)}><Icon name="x" size={24} color={T.red} /></button>
-                <button onClick={() => onGenreSwipe(true)} aria-label="J'aime" style={swipeBtn(true)}><Icon name="heart" size={26} color={T.accent} /></button>
+              <div style={{ display: "flex", justifyContent: "center", gap: 40, marginBottom: 14 }}>
+                <button onClick={() => onGenreSwipe(false)} aria-label="Je passe" style={swipeBtn(false, C)}><Icon name="x" size={28} color={C.ink} /></button>
+                <button className="cm-btn" onClick={() => onGenreSwipe(true)} aria-label="J'aime" style={swipeBtn(true, C)}><Icon name="heart" size={30} color={T.white} /></button>
               </div>
-              <div style={{ textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.18)" }}>Glissez ou appuyez pour voter</div>
+              <div style={{ textAlign: "center", fontSize: 14, color: C.mid }}>Glissez la carte ou appuyez pour voter</div>
             </div>
           )}
 
           {/* GENRE DONE - no match */}
           {screen === "genre" && genreDone && matchedGenres.length === 0 && (
-            <div style={{ textAlign: "center", paddingTop: 60 }}>
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><Icon name="x" size={52} color={T.sub} /></div>
-              <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 22, marginBottom: 10 }}>Aucun genre en commun</div>
-              <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 14, marginBottom: 28 }}>Recommencez !</div>
+            <div style={{ textAlign: "center", paddingTop: 48 }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 18, opacity: 0.85 }}><Matches size={130} ink={T.paper} /></div>
+              <div style={{ ...h2, marginBottom: 10 }}>Pas encore d'étincelle…</div>
+              <div style={{ fontSize: 16, lineHeight: 1.5, color: C.mid, marginBottom: 26 }}>Aucun genre en commun cette fois. On recommence ?</div>
               <Btn onClick={() => { setGenreIdx(0); setMatchedGenres([]); setMyGenreLikes(new Set()); setPartnerGenreLikes(new Set()); }}>Recommencer</Btn>
             </div>
           )}
 
           {/* GENRE DONE - pick */}
-		 {screen === "genre" && genreDone && !genreMatch && matchedGenres.length > 0 && (
-            <div style={{ paddingTop: 20 }}>
-              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2.5, color: T.accent, fontWeight: 700, marginBottom: 4 }}>Genres matchés</div>
-              <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 20, marginBottom: 4 }}><span style={{ color: T.accent }}>{matchedGenres.length} genre{matchedGenres.length > 1 ? "s" : ""}</span> en commun</div>
-              <div style={{ color: "rgba(255,255,255,0.33)", fontSize: 14, marginBottom: 18 }}>Choisissez pour charger les films →</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {screen === "genre" && genreDone && !genreMatch && matchedGenres.length > 0 && (
+            <div style={{ paddingTop: 16 }}>
+              <div style={{ ...eyebrow, marginBottom: 8 }}>Genres en commun</div>
+              <div style={{ ...h2, marginBottom: 8 }}><span style={{ color: T.yellow }}>{matchedGenres.length} genre{matchedGenres.length > 1 ? "s" : ""}</span> en commun</div>
+              <div style={{ fontSize: 16, color: C.mid, marginBottom: 18 }}>Choisissez-en un pour voir les films.</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 {matchedGenres.map(g => (
-                  <div key={g.id} onClick={() => startMovies(g)} style={{ borderRadius: 16, padding: "16px 12px", cursor: "pointer", border: `1px solid ${g.color}28`, background: `${g.color}0c`, textAlign: "center" }}>
-                    <div style={{ marginBottom: 7 }}><Icon name={g.icon} size={34} /></div>
-                    <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 13, color: g.color }}>{g.name}</div>
-                  </div>
+                  <button key={g.id} onClick={() => startMovies(g)} className="cm-btn" style={{ borderRadius: 14, padding: "18px 12px", cursor: "pointer", border: `2px solid ${T.paper}`, background: T.paper, color: T.ink, boxShadow: `3px 3px 0 ${T.coral}`, textAlign: "center", fontFamily: T.body }}>
+                    <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}><Icon name={g.icon} size={36} color={g.color} /></div>
+                    <div style={{ fontFamily: T.display, fontSize: 15 }}>{g.name}</div>
+                  </button>
                 ))}
-                {screen !== "genrePick" && !genreDone && (
-  <Btn outline onClick={() => setScreen("genre")}>Continuer à swiper →</Btn>
-)}
               </div>
             </div>
           )}
@@ -1296,110 +1417,111 @@ useEffect(() => {
           {/* MOVIE SWIPE */}
           {screen === "movie" && !movieDone && !movieMatch && cur && (
             <div>
-              <div style={{ paddingTop: 14, marginBottom: 10 }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2.5, color: T.accent, fontWeight: 700, marginBottom: 6 }}>
-                  Films · {selGenre && <span style={{ color: T.accent }}>{selGenre.name}</span>}
+              <div style={{ paddingTop: 10, marginBottom: 12 }}>
+                <div style={{ ...eyebrow, marginBottom: 8 }}>
+                  À vous de choisir{selGenre ? ` · ${selGenre.name}` : ""}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                  <div style={{ flex: 1, height: 2.5, background: "rgba(255,255,255,0.07)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ height: "100%", background: T.accent, borderRadius: 3, width: `${movies.length > 0 ? (movieIdx / movies.length) * 100 : 0}%`, transition: "width 0.3s" }} />
+                  <div style={{ flex: 1, height: 8, background: C.soft, borderRadius: 999, overflow: "hidden" }}>
+                    <div style={{ height: "100%", background: T.yellow, borderRadius: 999, width: `${movies.length > 0 ? (movieIdx / movies.length) * 100 : 0}%`, transition: "width 0.22s" }} />
                   </div>
-                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", whiteSpace: "nowrap" }}>{movieIdx}/{movies.length}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: "nowrap" }}>{movieIdx} / {movies.length}</div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, padding: "8px 14px" }}>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>Passer les déjà vus {seenIds.size > 0 ? `(${seenIds.size})` : ""}</span>
-                  <div onClick={() => {
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", border: `2px solid ${C.line}`, borderRadius: 12, padding: "6px 8px 6px 14px" }}>
+                  <span style={{ fontSize: 14, color: C.mid }}>Passer les déjà vus {seenIds.size > 0 ? `(${seenIds.size})` : ""}</span>
+                  <button role="switch" aria-checked={skipSeen} aria-label="Passer les déjà vus" onClick={() => {
                     const next = !skipSeen;
                     setSkipSeen(next);
                     if (next && cur && seenIds.has(cur.id)) advance(movieIdx, movies, next, seenIds);
-                  }} style={{ width: 38, height: 20, borderRadius: 10, background: skipSeen ? T.accent : "rgba(255,255,255,0.1)", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
-                    <div style={{ position: "absolute", top: 2, left: skipSeen ? 20 : 2, width: 16, height: 16, borderRadius: "50%", background: "white", transition: "left 0.2s" }} />
-                  </div>
+                  }} style={{ width: 52, height: 32, padding: 0, borderRadius: 999, background: skipSeen ? T.coral : "transparent", border: `2px solid ${skipSeen ? T.coral : C.ink}`, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                    <div style={{ position: "absolute", top: 4, left: skipSeen ? 24 : 4, width: 20, height: 20, borderRadius: "50%", background: skipSeen ? T.white : C.ink, transition: "left 0.2s" }} />
+                  </button>
                 </div>
               </div>
-              <div style={{ position: "relative", height: 430, marginBottom: 16 }}>
-                {movieIdx + 2 < movies.length && <div style={{ position: "absolute", inset: 0, borderRadius: 22, background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", transform: "scale(0.88) translateY(16px)" }} />}
-                {movieIdx + 1 < movies.length && <div style={{ position: "absolute", inset: 0, borderRadius: 22, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", transform: "scale(0.94) translateY(8px)" }} />}
+              <div style={{ position: "relative", height: 440, marginBottom: 20 }}>
+                {movieIdx + 2 < movies.length && <div style={stackBehind(2)} />}
+                {movieIdx + 1 < movies.length && <div style={stackBehind(1)} />}
                 <MovieCard key={`${selGenre?.id}-${movieIdx}`} movie={cur} onSwipe={onMovieSwipe} onDetail={() => setDetail(cur)} seenIds={seenIds} onToggleSeen={toggleSeen} wishlist={wishlist} onToggleWishlist={toggleWishlist} />
               </div>
-              <div style={{ display: "flex", justifyContent: "center", gap: 22, marginBottom: 12 }}>
-                <button onClick={() => onMovieSwipe(false)} aria-label="Je n'aime pas" style={swipeBtn(false)}><Icon name="x" size={24} color={T.red} /></button>
-                <button onClick={() => onMovieSwipe(true)} aria-label="J'aime" style={swipeBtn(true)}><Icon name="heart" size={26} color={T.accent} /></button>
+              <div style={{ display: "flex", justifyContent: "center", gap: 40, marginBottom: 12 }}>
+                <button onClick={() => onMovieSwipe(false)} aria-label="Je passe" style={swipeBtn(false, C)}><Icon name="x" size={28} color={C.ink} /></button>
+                <button className="cm-btn" onClick={() => onMovieSwipe(true)} aria-label="J'aime" style={swipeBtn(true, C)}><Icon name="heart" size={30} color={T.white} /></button>
               </div>
               <div style={{ textAlign: "center" }}>
-                <button onClick={() => setScreen("genre")} style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.38)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "8px 18px", fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}>← Changer de genre</button>
+                <button onClick={() => setScreen("genre")} style={{ ...linkBtn(false), color: C.link }}>Changer de genre</button>
               </div>
             </div>
           )}
 
           {/* NO MATCH */}
           {screen === "movie" && movieDone && !movieMatch && (
-            <div style={{ textAlign: "center", paddingTop: 60 }}>
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><Icon name="clap" size={56} color={T.sub} /></div>
-              <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 22, marginBottom: 10 }}>Pas de match !</div>
-              <div style={{ color: "rgba(255,255,255,0.33)", fontSize: 14, marginBottom: 28 }}>Essayez un autre genre !</div>
+            <div style={{ textAlign: "center", paddingTop: 48 }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 18, opacity: 0.85 }}><Matches size={130} ink={T.paper} /></div>
+              <div style={{ ...h2, marginBottom: 10 }}>Pas encore d'étincelle…</div>
+              <div style={{ fontSize: 16, lineHeight: 1.5, color: C.mid, marginBottom: 26 }}>Vos envies ne se sont pas croisées cette fois. Changez de genre ou relancez une sélection : le prochain film est peut-être le bon.</div>
               <Btn onClick={() => setScreen("genre")}>Choisir un autre genre</Btn>
-              <Btn outline onClick={() => startMovies(selGenre)}>Recharger ce genre</Btn>
+              <Btn outline onClick={() => startMovies(selGenre)}>Relancer ce genre</Btn>
             </div>
           )}
 
           {/* PROVIDERS */}
           {screen === "providers" && (
-            <div style={{ paddingTop: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 22 }}>Mes plateformes</div>
-                <button onClick={() => setScreen("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}>← Retour</button>
+            <div style={{ paddingTop: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 12 }}>
+                <div style={h2}>Mes plateformes</div>
+                <BackLink onClick={() => setScreen("home")} C={C} />
               </div>
-              <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 13, marginBottom: 20, lineHeight: 1.6 }}>
-                Sélectionnez vos plateformes pour ne voir que les films disponibles dessus. {selectedProviders.length === 0 && "Aucune sélection = tous les films."}
+              <div style={{ fontSize: 16, marginBottom: 20, lineHeight: 1.5 }}>
+                Sélectionnez vos plateformes pour ne voir que les films disponibles dessus. {selectedProviders.length === 0 && "Aucune sélection : tous les films."}
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
                 {PROVIDERS.map(p => {
                   const selected = selectedProviders.includes(p.id);
                   return (
-                    <div key={p.id} onClick={() => {
+                    <button key={p.id} aria-pressed={selected} onClick={() => {
                       const next = selected ? selectedProviders.filter(id => id !== p.id) : [...selectedProviders, p.id];
                       setSelectedProviders(next);
                       localStorage.setItem('selectedProviders', JSON.stringify(next));
-                    }} style={{ borderRadius: 14, padding: "14px 16px", cursor: "pointer", border: selected ? `2px solid ${p.color}` : "1px solid rgba(255,255,255,0.1)", background: selected ? `${p.color}22` : "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", gap: 10, transition: "all 0.15s", userSelect: "none" }}>
+                    }} style={{ borderRadius: 12, padding: "12px", cursor: "pointer", border: `2px solid ${T.ink}`, background: selected ? T.yellow : T.surface, boxShadow: selected ? `3px 3px 0 ${T.ink}` : "none", display: "flex", alignItems: "center", gap: 10, transition: "all 0.15s", fontFamily: T.body, color: T.ink, textAlign: "left" }}>
                       {providerLogos[p.id]
-                        ? <img src={providerLogos[p.id]} alt={p.name} style={{ width: 30, height: 30, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} />
-                        : <div style={{ width: 30, height: 30, borderRadius: 7, background: `${p.color}22`, border: `1px solid ${p.color}55`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, color: p.color, flexShrink: 0 }}>{p.name[0]}</div>}
-                      <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 13, color: selected ? "white" : "rgba(255,255,255,0.55)" }}>{p.name}</div>
-                      {selected && <div style={{ marginLeft: "auto", width: 18, height: 18, borderRadius: "50%", background: p.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon name="check" size={12} color="white" /></div>}
-                    </div>
+                        ? <img src={providerLogos[p.id]} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                        : <div style={{ width: 32, height: 32, borderRadius: 8, background: p.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, color: T.white, flexShrink: 0 }}>{p.name[0]}</div>}
+                      <div style={{ fontSize: 15, fontWeight: 700 }}>{p.name}</div>
+                      {selected && <div style={{ marginLeft: "auto", flexShrink: 0 }}><Icon name="check" size={18} color={T.ink} /></div>}
+                    </button>
                   );
                 })}
               </div>
               {selectedProviders.length > 0 && (
-                <button onClick={() => { setSelectedProviders([]); localStorage.removeItem('selectedProviders'); }}
-                  style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif", textDecoration: "underline", width: "100%", textAlign: "center", marginBottom: 10 }}>
-                  Tout désélectionner
-                </button>
+                <div style={{ textAlign: "center", marginBottom: 6 }}>
+                  <button onClick={() => { setSelectedProviders([]); localStorage.removeItem('selectedProviders'); }} style={linkBtn(false)}>
+                    Tout désélectionner
+                  </button>
+                </div>
               )}
               <Btn onClick={() => setScreen("home")}>Valider</Btn>
-              <div style={{ fontSize: 11, color: T.sub, textAlign: "center", marginTop: 6 }}>Disponibilités fournies par JustWatch, via TMDB.</div>
+              <div style={{ fontSize: 12, color: C.sub, textAlign: "center" }}>Disponibilités fournies par JustWatch, via TMDB.</div>
             </div>
           )}
 
           {/* MOOD FILTERS */}
           {screen === "mood" && (
-            <div style={{ paddingTop: 20, paddingBottom: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 22 }}>Mood</div>
-                <button onClick={() => setScreen("home")} style={{ background: "none", border: "none", color: T.sub, fontSize: 13, cursor: "pointer", fontFamily: T.body }}>← Retour</button>
+            <div style={{ paddingTop: 16, paddingBottom: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 12 }}>
+                <div style={h2}>Mood</div>
+                <BackLink onClick={() => setScreen("home")} C={C} />
               </div>
-              <div style={{ color: T.sub, fontSize: 13, marginBottom: 22, lineHeight: 1.6 }}>
+              <div style={{ fontSize: 16, marginBottom: 24, lineHeight: 1.5 }}>
                 Affinez le type de films proposés. Ces réglages s'appliquent à vos prochaines sessions.
               </div>
 
               {/* ANNEE */}
-              <div style={{ marginBottom: 24 }}>
+              <div style={{ marginBottom: 26 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2, color: T.accent, fontWeight: 700 }}>Année de sortie</div>
-                  <div style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>{mood.yearMin} — {mood.yearMax}</div>
+                  <div style={eyebrow}>Année de sortie</div>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>{mood.yearMin} — {mood.yearMax}</div>
                 </div>
-                <RangeSlider
+                <RangeSlider C={C} label="Année"
                   min={YEAR_MIN} max={YEAR_MAX} step={1}
                   valueMin={mood.yearMin} valueMax={mood.yearMax}
                   onChange={(lo, hi) => saveMood({ ...mood, yearMin: lo, yearMax: hi })}
@@ -1407,25 +1529,25 @@ useEffect(() => {
               </div>
 
               {/* NOTE MINIMUM */}
-              <div style={{ marginBottom: 24 }}>
+              <div style={{ marginBottom: 26 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2, color: T.accent, fontWeight: 700 }}>Note minimum</div>
-                  <div style={{ fontSize: 13, color: mood.ratingMin > 0 ? T.text : T.sub, fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>
+                  <div style={eyebrow}>Note minimum</div>
+                  <div style={{ fontSize: 15, color: mood.ratingMin > 0 ? C.ink : C.sub, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
                     {mood.ratingMin > 0
-                      ? <><Icon name="star" size={14} color={T.accent} /> {mood.ratingMin.toFixed(1)} et plus</>
+                      ? <><Icon name="star" size={15} color={T.coral} /> {mood.ratingMin.toFixed(1).replace(".", ",")} et plus</>
                       : "Peu importe"}
                   </div>
                 </div>
-                <RatingSlider value={mood.ratingMin} onChange={(v) => saveMood({ ...mood, ratingMin: v })} />
+                <RatingSlider C={C} value={mood.ratingMin} onChange={(v) => saveMood({ ...mood, ratingMin: v })} />
               </div>
 
               {/* DUREE */}
-              <div style={{ marginBottom: 24 }}>
+              <div style={{ marginBottom: 26 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2, color: T.accent, fontWeight: 700 }}>Durée</div>
-                  <div style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>{fmtDur(mood.runtimeMin)} — {fmtDur(mood.runtimeMax)}</div>
+                  <div style={eyebrow}>Durée</div>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>{fmtDur(mood.runtimeMin)} — {fmtDur(mood.runtimeMax)}</div>
                 </div>
-                <RangeSlider
+                <RangeSlider C={C} label="Durée"
                   min={RUNTIME_MIN} max={RUNTIME_MAX} step={5}
                   valueMin={mood.runtimeMin} valueMax={mood.runtimeMax}
                   onChange={(lo, hi) => saveMood({ ...mood, runtimeMin: lo, runtimeMax: hi })}
@@ -1433,26 +1555,23 @@ useEffect(() => {
               </div>
 
               {/* PAYS */}
-              <div style={{ marginBottom: 24 }}>
+              <div style={{ marginBottom: 26 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 2, color: T.accent, fontWeight: 700 }}>Pays d'origine</div>
-                  <div style={{ fontSize: 12, color: T.sub }}>{mood.countries.length === 0 ? "Tous" : `${mood.countries.length} sélectionné${mood.countries.length > 1 ? "s" : ""}`}</div>
+                  <div style={eyebrow}>Pays d'origine</div>
+                  <div style={{ fontSize: 14, color: C.sub }}>{mood.countries.length === 0 ? "Tous" : `${mood.countries.length} sélectionné${mood.countries.length > 1 ? "s" : ""}`}</div>
                 </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {COUNTRIES.map(co => {
                     const sel = mood.countries.includes(co.code);
                     return (
-                      <div key={co.code}
+                      <button key={co.code} aria-pressed={sel}
                         onClick={() => saveMood({
                           ...mood,
                           countries: sel ? mood.countries.filter(x => x !== co.code) : [...mood.countries, co.code],
                         })}
-                        style={{ borderRadius: 10, padding: "8px 13px", cursor: "pointer", userSelect: "none",
-                          border: sel ? `1.5px solid ${T.accent}` : `1px solid ${T.borderSoft}`,
-                          background: sel ? T.accentSoft : T.card,
-                          fontSize: 12.5, fontWeight: 600, color: sel ? T.accent : T.textMid, transition: "all 0.15s" }}>
+                        style={{ borderRadius: 999, height: 40, padding: "0 14px", cursor: "pointer", border: `2px solid ${T.ink}`, background: sel ? T.yellow : "transparent", fontSize: 14, fontWeight: 700, color: T.ink, fontFamily: T.body, transition: "all 0.15s" }}>
                         {co.name}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -1460,27 +1579,24 @@ useEffect(() => {
 
               <Btn onClick={() => setScreen("home")}>Valider</Btn>
               {isMoodActive(mood) && (
-                <button onClick={() => saveMood({ ...DEFAULT_MOOD })}
-                  style={{ background: "none", border: "none", color: T.sub, fontSize: 13, cursor: "pointer", fontFamily: T.body, textDecoration: "underline", width: "100%", textAlign: "center", marginTop: 4 }}>
-                  Réinitialiser les critères
-                </button>
+                <div style={{ textAlign: "center" }}>
+                  <button onClick={() => saveMood({ ...DEFAULT_MOOD })} style={linkBtn(false)}>
+                    Réinitialiser les critères
+                  </button>
+                </div>
               )}
             </div>
           )}
 
           {/* AUCUN FILM TROUVE */}
           {screen === "empty" && (
-            <div style={{ paddingTop: 60, textAlign: "center" }}>
-              <div style={{ marginBottom: 20, display: "flex", justifyContent: "center" }}>
-                <Icon name="clap" size={56} color={T.sub} />
-              </div>
-              <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 21, marginBottom: 12 }}>
-                Aucun film ne correspond
-              </div>
-              <div style={{ color: T.sub, fontSize: 14, lineHeight: 1.7, marginBottom: 28, padding: "0 10px" }}>
+            <div style={{ paddingTop: 40, textAlign: "center" }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}><Matches size={130} /></div>
+              <div style={{ ...h2, marginBottom: 12 }}>Pas encore d'étincelle…</div>
+              <div style={{ fontSize: 16, lineHeight: 1.5, marginBottom: 26, padding: "0 6px" }}>
                 {emptyInfo?.reason === "platform"
-                  ? <>Des films correspondent à vos critères, mais aucun n'est disponible sur {selectedProviders.length > 1 ? "vos plateformes" : "votre plateforme"}.<br/>Ajoutez une plateforme ou assouplissez vos critères.</>
-                  : <>Vos critères Mood sont trop restrictifs pour ce genre.<br/>Essayez d'élargir l'année, la durée ou la note minimum.</>}
+                  ? <>Des films correspondent à vos critères, mais aucun n'est disponible sur {selectedProviders.length > 1 ? "vos plateformes" : "votre plateforme"}. Ajoutez une plateforme ou assouplissez vos critères.</>
+                  : <>Vos critères Mood sont trop stricts pour ce genre. Élargissez l'année, la durée ou la note minimum.</>}
               </div>
               {emptyInfo?.reason === "platform" && (
                 <Btn onClick={() => setScreen("providers")}>Modifier mes plateformes</Btn>
@@ -1492,32 +1608,32 @@ useEffect(() => {
 
           {/* WISHLIST */}
           {screen === "wishlist" && (
-            <div style={{ paddingTop: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-                <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 22 }}>Ma liste</div>
-                <button onClick={() => setScreen("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}>← Retour</button>
+            <div style={{ paddingTop: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, gap: 12 }}>
+                <div style={h2}>Ma liste</div>
+                <BackLink onClick={() => setScreen("home")} C={C} />
               </div>
               {wishlist.length === 0 ? (
-                <div style={{ textAlign: "center", paddingTop: 40, color: "rgba(255,255,255,0.3)", fontSize: 15 }}>
-                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><Icon name="bookmark" size={44} color={T.sub} /></div>
-                  Votre liste est vide<br/>
-                  <span style={{ fontSize: 13, marginTop: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>Appuyez sur <Icon name="bookmark" size={13} color={T.sub} /> sur une carte pour la sauvegarder</span>
+                <div style={{ textAlign: "center", paddingTop: 36, fontSize: 16, lineHeight: 1.5 }}>
+                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><Icon name="bookmark" size={44} color={T.blue} /></div>
+                  Votre liste est vide.<br/>
+                  <span style={{ fontSize: 14, color: C.sub, marginTop: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>Appuyez sur <Icon name="bookmark" size={14} color={C.sub} /> sur une carte pour garder un film.</span>
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
-                    {wishlist.length} film{wishlist.length > 1 ? "s" : ""} sauvegardé{wishlist.length > 1 ? "s" : ""}
+                  <div style={{ fontSize: 14, color: C.sub, marginBottom: 4 }}>
+                    {wishlist.length} film{wishlist.length > 1 ? "s" : ""} gardé{wishlist.length > 1 ? "s" : ""}
                   </div>
                   {wishlist.map(m => (
-                    <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "10px 14px" }}>
-                      <div style={{ width: 40, height: 56, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+                    <div key={m.id} style={listRow}>
+                      <div style={{ width: 40, height: 60, borderRadius: 6, overflow: "hidden", flexShrink: 0, border: `1.5px solid ${T.ink}` }}>
                         <Poster url={m.poster} title={m.title} style={{ width: "100%", height: "100%" }} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</div>
-                        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{m.year}{m.imdb ? <> · <Icon name="star" size={10} color="#F5C518" /> {m.imdb}</> : ""}</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</div>
+                        <div style={{ fontSize: 14, color: C.sub, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>{m.year}{m.imdb ? <> · <Icon name="star" size={12} color={T.coral} /> {String(m.imdb).replace(".", ",")}</> : ""}</div>
                       </div>
-                      <button onClick={() => removeWishlist(m.id)} style={{ background: `${T.red}1a`, border: `1px solid ${T.red}44`, borderRadius: 8, padding: "6px 10px", color: T.red, fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif", flexShrink: 0, display: "flex", alignItems: "center" }} aria-label="Retirer"><Icon name="x" size={14} color={T.red} /></button>
+                      <button onClick={() => removeWishlist(m.id)} style={removeBtn} aria-label={`Retirer ${m.title}`}><Icon name="x" size={16} color={T.ink} /></button>
                     </div>
                   ))}
                   <div style={{ marginTop: 10 }}>
@@ -1530,36 +1646,36 @@ useEffect(() => {
 
           {/* SEEN MOVIES */}
           {screen === "seen" && (
-            <div style={{ paddingTop: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-                <div style={{ fontFamily: T.display, fontWeight: 700, fontSize: 22 }}>Mes films déjà vus</div>
-                <button onClick={() => setScreen("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}>← Retour</button>
+            <div style={{ paddingTop: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, gap: 12 }}>
+                <div style={h2}>Déjà vus</div>
+                <BackLink onClick={() => setScreen("home")} C={C} />
               </div>
               {seenIds.size === 0 ? (
-                <div style={{ textAlign: "center", paddingTop: 40, color: "rgba(255,255,255,0.3)", fontSize: 15 }}>
-                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><Icon name="clap" size={44} color={T.sub} /></div>
-                  Aucun film marqué comme déjà vu
+                <div style={{ textAlign: "center", paddingTop: 36, fontSize: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><Icon name="check" size={44} color={T.blue} /></div>
+                  Aucun film marqué comme déjà vu.
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
-                    {seenIds.size} film{seenIds.size > 1 ? "s" : ""} — ces films seront exclus si vous activez « Passer les déjà vus »
+                  <div style={{ fontSize: 14, color: C.sub, marginBottom: 4, lineHeight: 1.5 }}>
+                    {seenIds.size} film{seenIds.size > 1 ? "s" : ""}. Ils sont exclus si vous activez « Passer les déjà vus ».
                   </div>
                   {seenMovies.length > 0 ? seenMovies.map(m => (
-                    <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "10px 14px" }}>
-                      <div style={{ width: 40, height: 56, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+                    <div key={m.id} style={listRow}>
+                      <div style={{ width: 40, height: 60, borderRadius: 6, overflow: "hidden", flexShrink: 0, border: `1.5px solid ${T.ink}` }}>
                         <Poster url={m.poster} title={m.title} style={{ width: "100%", height: "100%" }} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</div>
-                        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{m.year}{m.imdb ? <> · <Icon name="star" size={10} color="#F5C518" /> {m.imdb}</> : ""}</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</div>
+                        <div style={{ fontSize: 14, color: C.sub, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>{m.year}{m.imdb ? <> · <Icon name="star" size={12} color={T.coral} /> {String(m.imdb).replace(".", ",")}</> : ""}</div>
                       </div>
-                      <button onClick={() => removeSeen(m.id)} style={{ background: `${T.red}1a`, border: `1px solid ${T.red}44`, borderRadius: 8, padding: "6px 10px", color: T.red, fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif", flexShrink: 0, display: "flex", alignItems: "center" }} aria-label="Retirer"><Icon name="x" size={14} color={T.red} /></button>
+                      <button onClick={() => removeSeen(m.id)} style={removeBtn} aria-label={`Retirer ${m.title}`}><Icon name="x" size={16} color={T.ink} /></button>
                     </div>
                   )) : [...seenIds].map(id => (
-                    <div key={id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "12px 16px" }}>
-                      <div style={{ fontSize: 14, color: "rgba(255,255,255,0.6)" }}>Film #{id}</div>
-                      <button onClick={() => removeSeen(id)} style={{ background: `${T.red}1a`, border: `1px solid ${T.red}44`, borderRadius: 8, padding: "5px 12px", color: T.red, fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif", display: "flex", alignItems: "center" }} aria-label="Retirer"><Icon name="x" size={14} color={T.red} /></button>
+                    <div key={id} style={{ ...listRow, justifyContent: "space-between" }}>
+                      <div style={{ fontSize: 16 }}>Film n° {id}</div>
+                      <button onClick={() => removeSeen(id)} style={removeBtn} aria-label="Retirer"><Icon name="x" size={16} color={T.ink} /></button>
                     </div>
                   ))}
                   <div style={{ marginTop: 10 }}>
@@ -1571,21 +1687,21 @@ useEffect(() => {
           )}
 
           {/* MENTIONS LEGALES */}
-          {screen === "legal" && <LegalScreen onBack={() => setScreen("home")} />}
+          {screen === "legal" && <LegalScreen onBack={() => setScreen("home")} C={C} />}
 
           {/* FINAL */}
           {screen === "final" && (
-            <div style={{ textAlign: "center", paddingTop: 56 }}>
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16, animation: "float 3s ease-in-out infinite" }}><Icon name="clap" size={72} /></div>
-              <div style={{ fontFamily: T.display, fontWeight: 800, fontSize: 32, marginBottom: 10, letterSpacing: "-1px" }}>Bonne séance !</div>
-              <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 15, marginBottom: 34 }}>Éteignez les lumières et profitez !</div>
+            <div style={{ textAlign: "center", paddingTop: 44 }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16, animation: "float 3.5s ease-in-out infinite" }}><Matches size={170} /></div>
+              <div style={{ fontFamily: T.display, fontSize: 34, lineHeight: 1.05, marginBottom: 10 }}>Bonne séance !</div>
+              <div style={{ fontSize: 16, marginBottom: 30 }}>Éteignez les lumières, on s'occupe du reste.</div>
               <Btn onClick={reset}>Nouvelle session</Btn>
             </div>
           )}
         </div>
 
-        {genreMatch && <MatchModal item={genreMatch} type="genre" onClose={() => { setGenreMatch(null); }} />}
-        {movieMatch && <MatchModal item={movieMatch} type="movie" onClose={() => { setMovieMatch(null); setScreen("final"); }} />}
+        {genreMatch && <MatchModal item={genreMatch} type="genre" solo={isSolo} onClose={() => { setGenreMatch(null); }} />}
+        {movieMatch && <MatchModal item={movieMatch} type="movie" solo={isSolo} onClose={() => { setMovieMatch(null); setScreen("final"); }} />}
         {detail && <DetailPanel movie={detail} onClose={() => setDetail(null)} />}
       </div>
     </>
