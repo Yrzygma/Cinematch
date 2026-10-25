@@ -74,6 +74,7 @@ function Icon({ name, color = T.ink, size = 36, fill = false }) {
     play: <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z"/></svg>,
     bookmark: <svg width={size} height={size} viewBox="0 0 24 24" fill={fill ? color : "none"} stroke={color} strokeWidth={2.4} strokeLinejoin="round" aria-hidden="true"><path d="M6 4h12v16l-6-4-6 4V4z"/></svg>,
     back: <svg {...s}><path d="M20 8l-8 8 8 8"/></svg>,
+    home: <svg {...s}><path d="M5 15L16 5l11 10"/><path d="M8 13v13h6v-7h4v7h6V13"/></svg>,
     star: <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true"><path d="M12 2l3 6.5 7 .8-5 4.8 1.3 7L12 17.8 5.7 21l1.3-7-5-4.8 7-.8z"/></svg>,
     share: <svg {...s}><circle cx="7" cy="16" r="3"/><circle cx="23" cy="8" r="3"/><circle cx="23" cy="24" r="3"/><path d="M10 14.5l10-5M10 17.5l10 5"/></svg>,
     check: <svg {...s} strokeWidth={3}><path d="M6 16l7 7L26 9"/></svg>,
@@ -1138,7 +1139,7 @@ export default function CineMatch() {
     setPartnerConnected(false); setMyGenreLikes(new Set()); setPartnerGenreLikes(new Set());
     setPartnerMovieLikes(new Set()); setPendingGenreMatch(null); setGenreMatchQueue([]); lastPartnerGenreRef.current = -1;
     setMovieIdx(0); setMyMovieLikes(new Set()); setSelGenre(null); setPartnerName(""); setSessionCode("");
-    setCreateError(null); setJoinError(null);
+    setCreateError(null); setJoinError(null); setDetail(null); setEmptyInfo(null);
   };
 
   // Auto-join from URL
@@ -1179,6 +1180,23 @@ useEffect(() => {
   useEffect(() => {
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", C.bg);
   }, [C.bg]);
+
+  // ─── RETOUR A L'ACCUEIL ───────────────────────────────────────────────────
+  // Depuis un ecran de reglages : retour direct. Pendant une partie : on demande
+  // confirmation, car la session (et les votes en cours) est abandonnee.
+  const FLOW_SCREENS = ["waiting", "genre", "genrePick", "loading", "movie", "empty", "final"];
+  const inFlow = FLOW_SCREENS.includes(screen);
+  const [confirmHome, setConfirmHome] = useState(false);
+  const goHome = () => {
+    if (!inFlow) { setScreen("home"); return; }
+    if (screen === "final") { reset(); return; }
+    setConfirmHome(true);
+  };
+  const confirmGoHome = () => {
+    track("session_left", { screen, solo: isSolo });
+    setConfirmHome(false);
+    reset();
+  };
 
   // Boutons : principal (corail), secondaire (contour bleu, creme le soir), discret (jaune)
   const Btn = ({ onClick, children, outline, tertiary, disabled }) => {
@@ -1229,11 +1247,21 @@ useEffect(() => {
 
         {/* Header */}
         <div style={{ width: "100%", maxWidth: 440, padding: "18px 20px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", zIndex: 1 }}>
-          <Wordmark C={C} />
+          {screen === "home"
+            ? <Wordmark C={C} />
+            : <button onClick={goHome} aria-label="Retour à l'accueil" style={{ background: "none", border: "none", padding: 0, cursor: "pointer", minHeight: 44 }}><Wordmark C={C} /></button>}
           {screen !== "home" && (
-            <div style={{ border: `2px solid ${C.line}`, borderRadius: 999, padding: "5px 12px", fontSize: 13, fontWeight: 600, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>
-              {partnerConnected && <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.dark ? T.yellow : T.green }} />}
-              {partnerConnected ? partnerName : (isSolo ? "Solo" : "En attente…")}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {inFlow && screen !== "final" && (
+                <div style={{ border: `2px solid ${C.line}`, borderRadius: 999, padding: "5px 12px", fontSize: 13, fontWeight: 600, color: C.ink, display: "flex", alignItems: "center", gap: 6, maxWidth: 130, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {partnerConnected && <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.dark ? T.yellow : T.green, flexShrink: 0 }} />}
+                  {partnerConnected ? partnerName : (isSolo ? "Solo" : "En attente…")}
+                </div>
+              )}
+              <button onClick={goHome} aria-label="Retour à l'accueil" title="Accueil" className="cm-btn"
+                style={{ width: 44, height: 44, borderRadius: 12, border: `2px solid ${C.ink}`, background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Icon name="home" size={22} color={C.ink} />
+              </button>
             </div>
           )}
         </div>
@@ -1703,6 +1731,29 @@ useEffect(() => {
         {genreMatch && <MatchModal item={genreMatch} type="genre" solo={isSolo} onClose={() => { setGenreMatch(null); }} />}
         {movieMatch && <MatchModal item={movieMatch} type="movie" solo={isSolo} onClose={() => { setMovieMatch(null); setScreen("final"); }} />}
         {detail && <DetailPanel movie={detail} onClose={() => setDetail(null)} />}
+
+        {/* Confirmation avant d'abandonner une partie en cours */}
+        {confirmHome && (
+          <div onClick={() => setConfirmHome(false)} style={{ position: "fixed", inset: 0, background: "rgba(43,35,48,0.82)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 400, padding: 16 }}>
+            <div role="alertdialog" aria-modal="true" aria-labelledby="cm-home-title" className="cm-pop" onClick={e => e.stopPropagation()}
+              style={{ background: T.paper, color: T.ink, border: `2px solid ${T.ink}`, borderRadius: 18, boxShadow: `5px 5px 0 ${T.coral}`, padding: "24px 22px 12px", maxWidth: 360, width: "100%" }}>
+              <div id="cm-home-title" style={{ fontFamily: T.display, fontSize: 24, lineHeight: 1.05, marginBottom: 10 }}>
+                {isSolo ? "Revenir à l'accueil ?" : "Quitter la session ?"}
+              </div>
+              <div style={{ fontSize: 16, lineHeight: 1.5, marginBottom: 20 }}>
+                {isSolo
+                  ? "Vos choix en cours seront perdus. Votre liste et vos réglages sont conservés."
+                  : `${partnerName || "Votre partenaire"} restera seul de son côté et vos choix en cours seront perdus. Votre liste et vos réglages sont conservés.`}
+              </div>
+              <button className="cm-btn" onClick={confirmGoHome} style={{ width: "100%", height: 56, border: "none", borderRadius: 12, background: T.coral, color: T.white, fontFamily: T.body, fontWeight: 700, fontSize: 16, cursor: "pointer", marginBottom: 12, boxShadow: `3px 3px 0 ${T.ink}` }}>
+                Revenir à l'accueil
+              </button>
+              <button onClick={() => setConfirmHome(false)} style={{ width: "100%", height: 56, border: `2px solid ${T.blue}`, borderRadius: 12, background: "transparent", color: T.blue, fontFamily: T.body, fontWeight: 700, fontSize: 16, cursor: "pointer", marginBottom: 12 }}>
+                Rester
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
