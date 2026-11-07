@@ -208,7 +208,7 @@ export default async function handler(req, res) {
         year: m.release_date ? parseInt(m.release_date.split("-")[0]) : null,
         poster: `https://image.tmdb.org/t/p/w342${m.poster_path}`,
         backdrop: m.backdrop_path ? `https://image.tmdb.org/t/p/w780${m.backdrop_path}` : null,
-        imdb: m.vote_average ? Math.round(m.vote_average * 10) / 10 : null,
+        tmdb: m.vote_average ? Math.round(m.vote_average * 10) / 10 : null,
         synopsis: m.overview || "",
         popularity: m.popularity,
         streamingOn: flatrate,

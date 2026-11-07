@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { initAnalytics, track } from "./analytics.js";
+import { readLetterboxd, readImdb, resolveItems } from "./importers.js";
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const supabase = createClient(
@@ -78,6 +79,10 @@ function Icon({ name, color = T.ink, size = 36, fill = false }) {
     star: <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true"><path d="M12 2l3 6.5 7 .8-5 4.8 1.3 7L12 17.8 5.7 21l1.3-7-5-4.8 7-.8z"/></svg>,
     share: <svg {...s}><circle cx="7" cy="16" r="3"/><circle cx="23" cy="8" r="3"/><circle cx="23" cy="24" r="3"/><path d="M10 14.5l10-5M10 17.5l10 5"/></svg>,
     check: <svg {...s} strokeWidth={3}><path d="M6 16l7 7L26 9"/></svg>,
+    download: <svg {...s}><path d="M16 4v16"/><path d="M9 13l7 7 7-7"/><path d="M5 22v5h22v-5"/></svg>,
+    lock: <svg {...s}><rect x="7" y="14" width="18" height="13" rx="2"/><path d="M11 14v-4a5 5 0 0110 0v4"/></svg>,
+    file: <svg {...s}><path d="M8 4h11l5 5v19H8z"/><path d="M18 4v6h6"/></svg>,
+    chevron: <svg {...s}><path d="M12 7l9 9-9 9"/></svg>,
   };
   return icons[name] || null;
 }
@@ -317,12 +322,53 @@ function RangeSlider({ min, max, step, valueMin, valueMax, onChange, C, label })
   );
 }
 
-function RatingBadge({ score }) {
-  if (!score) return null;
+// ─── NOTES IMDb / ROTTEN TOMATOES ─────────────────────────────────────────────
+// rating = { imdb: 7.8 | null, rt: 91 | null } (undefined tant que non chargee).
+// RT absent : IMDb seul. Les deux absents : rien.
+const fmtNote = (n) => Number(n).toFixed(1).replace(".", ",");
+
+function ScoreBadges({ rating }) {
+  if (!rating || (rating.imdb == null && rating.rt == null)) return null;
+  const pill = { display: "inline-flex", alignItems: "baseline", gap: 6, border: `2px solid ${T.ink}`, borderRadius: 999, padding: "2px 10px", fontSize: 15, fontWeight: 700, fontFamily: T.body, whiteSpace: "nowrap" };
+  const label = { fontSize: 11, letterSpacing: 0.8 };
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: T.paper, border: `2px solid ${T.ink}`, borderRadius: 999, padding: "3px 9px", fontSize: 13, fontWeight: 700, color: T.ink, fontFamily: T.body }}>
-      <Icon name="star" size={13} color={T.coral} /> {String(score).replace(".", ",")}/10
-    </span>
+    <>
+      {rating.imdb != null && (
+        <span style={{ ...pill, background: T.yellow, color: T.ink }} aria-label={`Note IMDb ${fmtNote(rating.imdb)} sur 10`}>
+          <span style={label}>IMDb</span>{fmtNote(rating.imdb)}
+        </span>
+      )}
+      {rating.rt != null && (
+        <span style={{ ...pill, background: T.coral, color: T.white }} aria-label={`Rotten Tomatoes ${rating.rt} % de critiques positives`}>
+          <span style={label}>RT</span>{rating.rt} %
+        </span>
+      )}
+    </>
+  );
+}
+
+function ScoreTiles({ rating }) {
+  if (!rating || (rating.imdb == null && rating.rt == null)) return null;
+  const tile = { border: `2px solid ${T.ink}`, borderRadius: 12, boxShadow: `3px 3px 0 ${T.ink}`, padding: "10px 12px" };
+  const head = { fontSize: 12, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase" };
+  const big = { fontFamily: T.display, fontSize: 28 };
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, marginBottom: 18 }}>
+      {rating.imdb != null && (
+        <div style={{ ...tile, background: T.yellow, color: T.ink }}>
+          <div style={head}>IMDb</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: 2 }}><span style={big}>{fmtNote(rating.imdb)}</span><span style={{ fontSize: 14, fontWeight: 700 }}>/10</span></div>
+          <div style={{ fontSize: 12, marginTop: 2 }}>Note des spectateurs</div>
+        </div>
+      )}
+      {rating.rt != null && (
+        <div style={{ ...tile, background: T.coral, color: T.white }}>
+          <div style={head}>Rotten Tomatoes</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: 2 }}><span style={big}>{rating.rt}</span><span style={{ fontSize: 14, fontWeight: 700 }}>%</span></div>
+          <div style={{ fontSize: 12, marginTop: 2 }}>Critiques positives</div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -341,7 +387,7 @@ function Poster({ url, title, style }) {
   const initials = (title || "").replace(/[^a-zA-ZÀ-ÿ ]/g, "").split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "?";
   return (
     <div style={{ position: "relative", background: `repeating-linear-gradient(135deg, #3B4A6B 0 14px, #34425F 14px 28px)`, overflow: "hidden", ...style }}>
-      {url && <img src={url} alt={title} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: ok ? 1 : 0, transition: "opacity 0.4s" }} onLoad={() => setOk(true)} />}
+      {url && <img src={url} alt={title} loading="lazy" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: ok ? 1 : 0, transition: "opacity 0.4s" }} onLoad={() => setOk(true)} />}
       {!ok && (
         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6 }}>
           <div style={{ fontFamily: T.display, fontSize: 30, color: T.yellow }}>{initials}</div>
@@ -406,7 +452,7 @@ const chipBtn = (on) => ({
   cursor: "pointer", fontFamily: T.body, fontWeight: 700,
 });
 
-function MovieCard({ movie, onSwipe, onDetail, seenIds, onToggleSeen, wishlist = [], onToggleWishlist }) {
+function MovieCard({ movie, rating, onSwipe, onDetail, seenIds, onToggleSeen, wishlist = [], onToggleWishlist }) {
   const { tx, out, ind, onStart, onMove, onEnd } = useSwipe(onSwipe);
   const isSeen = seenIds.has(movie.id);
   const inList = wishlist.some(m => m.id === movie.id);
@@ -437,9 +483,9 @@ function MovieCard({ movie, onSwipe, onDetail, seenIds, onToggleSeen, wishlist =
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: T.display, fontSize: 22, lineHeight: 1.05, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{movie.title}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, fontSize: 14, color: "#5E5260" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontSize: 14, color: "#5E5260", flexWrap: "wrap", minHeight: 28 }}>
               {movie.year && <span>{movie.year}</span>}
-              {movie.imdb && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 16, fontWeight: 700, color: T.ink }}><Icon name="star" size={15} color={T.coral} />{String(movie.imdb).replace(".", ",")}/10</span>}
+              <ScoreBadges rating={rating} />
             </div>
           </div>
           <button {...stop} onClick={e => { e.stopPropagation(); onDetail(); }}
@@ -464,7 +510,7 @@ function MovieCard({ movie, onSwipe, onDetail, seenIds, onToggleSeen, wishlist =
   );
 }
 
-function DetailPanel({ movie, onClose }) {
+function DetailPanel({ movie, rating, onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 200, background: T.paper, color: T.ink, overflowY: "auto" }}>
       <div style={{ maxWidth: 440, margin: "0 auto" }}>
@@ -474,10 +520,8 @@ function DetailPanel({ movie, onClose }) {
         </div>
         <div style={{ padding: "20px 20px 48px", position: "relative" }}>
           <div style={{ fontFamily: T.display, fontSize: 26, lineHeight: 1.05, marginBottom: 12 }}>{movie.title}</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 18 }}>
-            <RatingBadge score={movie.imdb} />
-            {movie.year && <span style={{ fontSize: 14, color: "#5E5260" }}>{movie.year}</span>}
-          </div>
+          {movie.year && <div style={{ fontSize: 14, color: "#5E5260", marginTop: -4, marginBottom: 16 }}>{movie.year}</div>}
+          <ScoreTiles rating={rating} />
           {movie.streamingOn?.length > 0 && (
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>Disponible sur</div>
@@ -504,7 +548,7 @@ function DetailPanel({ movie, onClose }) {
   );
 }
 
-function MatchModal({ item, type, solo, onClose }) {
+function MatchModal({ item, type, solo, rating, onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(43,35,48,0.82)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 16, overflowY: "auto" }}>
       <div role="dialog" aria-modal="true" aria-label="C'est un match" className="cm-pop" style={{ position: "relative", overflow: "hidden", background: T.paper, color: T.ink, border: `2px solid ${T.ink}`, borderRadius: 18, boxShadow: `5px 5px 0 ${T.coral}`, padding: "24px 22px 22px", textAlign: "center", maxWidth: 360, width: "100%" }}>
@@ -526,8 +570,9 @@ function MatchModal({ item, type, solo, onClose }) {
                 <Poster url={item.poster} title={item.title} style={{ width: "100%", height: "100%" }} />
               </div>
               <div style={{ fontFamily: T.display, fontSize: 21, lineHeight: 1.05, marginBottom: 8 }}>{item.title}</div>
-              <div style={{ fontSize: 14, marginBottom: 10 }}>
-                {[item.year, item.imdb ? `${String(item.imdb).replace(".", ",")}/10` : null].filter(Boolean).join(" · ")}
+              <div style={{ fontSize: 14, marginBottom: 10, display: "flex", justifyContent: "center", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {item.year && <span>{item.year}</span>}
+                <ScoreBadges rating={rating} />
               </div>
               <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.4, marginBottom: 18 }}>
                 {solo ? "Ce film vous plaît. Bonne pioche." : "Vous avez aimé le même film. Comme quoi, vous avez plutôt bon goût tous les deux."}
@@ -622,6 +667,7 @@ function LegalScreen({ onBack, C }) {
 
       <H>Données collectées</H>
       <P><strong>Sur votre appareil.</strong> Votre liste, vos films déjà vus, vos plateformes et vos réglages Mood sont enregistrés uniquement dans le stockage local de votre navigateur. Ils ne quittent pas votre appareil. Vous pouvez les effacer à tout moment depuis l'app ou en vidant les données du site.</P>
+      <P><strong>Import Letterboxd ou IMDb.</strong> Le fichier que vous choisissez est lu sur votre appareil. Seuls les titres des films (ou leurs identifiants IMDb) sont envoyés à notre serveur pour retrouver les films correspondants ; ils ne sont pas conservés.</P>
       <P><strong>Pendant une session à deux.</strong> Le prénom saisi, le code de session et vos votes (genres et films) sont enregistrés sur Supabase pour permettre la synchronisation en temps réel. Ces données sont supprimées automatiquement au bout de 30 jours.</P>
       <P><strong>Mesure d'audience.</strong> Des statistiques d'usage anonymes (par exemple « session créée », « match trouvé ») sont envoyées à PostHog, hébergé dans l'Union européenne. Aucun cookie n'est déposé, aucun nom ni e-mail n'est collecté, aucune donnée n'est revendue ni utilisée à des fins publicitaires. Ces mesures servent uniquement à améliorer l'app.</P>
       <P>Conformément au RGPD, vous pouvez demander l'accès à vos données ou leur suppression via le contact ci-dessus.</P>
@@ -629,6 +675,7 @@ function LegalScreen({ onBack, C }) {
       <H>Crédits</H>
       <P>Données des films : <A href="https://www.themoviedb.org">TMDB</A>. Ce produit utilise l'API TMDB mais n'est ni approuvé ni certifié par TMDB.</P>
       <P>Disponibilités sur les plateformes de streaming : <A href="https://www.justwatch.com">JustWatch</A>.</P>
+      <P>Notes IMDb et Rotten Tomatoes : obtenues via <A href="https://www.omdbapi.com">OMDb API</A>. IMDb et Rotten Tomatoes sont des marques de leurs détenteurs respectifs ; CinéMatch n'est affilié à aucun de ces services.</P>
       <P>Les affiches, images et marques des films et des plateformes appartiennent à leurs détenteurs respectifs.</P>
     </div>
   );
@@ -726,6 +773,10 @@ export default function CineMatch() {
   const [skipSeen, setSkipSeen] = useState(false);
   const wishlistKey = `wishlist_${userId}`;
   const [wishlist, setWishlist] = useState(() => JSON.parse(localStorage.getItem(`wishlist_${localStorage.getItem('userId') || 'guest'}`) || "[]"));
+  // Notes IMDb / RT : chargees pour la carte affichee et les 2 suivantes
+  // seulement (quota OMDb). Le serveur les conserve dans Supabase.
+  const [ratings, setRatings] = useState({});
+  const ratingsAsked = useRef(new Set());
   const [loading, setLoading] = useState(false);
   const [myMovieLikes, setMyMovieLikes] = useState(new Set());
   const [partnerMovieLikes, setPartnerMovieLikes] = useState(new Set());
@@ -734,6 +785,18 @@ export default function CineMatch() {
   const movieDone = movies.length > 0 && movieIdx >= movies.length;
   const cur = movies[movieIdx];
   const isSolo = !sessionId;
+
+  useEffect(() => {
+    if (screen !== "movie" || movies.length === 0) return;
+    movies.slice(movieIdx, movieIdx + 3).forEach((m) => {
+      if (!m?.id || ratingsAsked.current.has(m.id)) return;
+      ratingsAsked.current.add(m.id);
+      fetch(`/api/ratings?id=${m.id}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d) setRatings((prev) => ({ ...prev, [m.id]: { imdb: d.imdb ?? null, rt: d.rt ?? null } })); })
+        .catch(() => { ratingsAsked.current.delete(m.id); });
+    });
+  }, [screen, movies, movieIdx]);
 
   // ─── MESURE D'AUDIENCE ─────────────────────────────────────────────────────
   useEffect(() => { initAnalytics(userId); }, [userId]);
@@ -994,7 +1057,7 @@ export default function CineMatch() {
         if (movie) {
           setSeenMovies(prev2 => {
             if (prev2.find(m => m.id === id)) return prev2;
-            const updated = [...prev2, { id: movie.id, title: movie.title, poster: movie.poster, year: movie.year, imdb: movie.imdb }];
+            const updated = [...prev2, { id: movie.id, title: movie.title, poster: movie.poster, year: movie.year }];
             localStorage.setItem(seenMoviesKey, JSON.stringify(updated));
             return updated;
           });
@@ -1111,7 +1174,7 @@ export default function CineMatch() {
       if (exists) {
         updated = prev.filter(m => m.id !== movie.id);
       } else {
-        updated = [...prev, { id: movie.id, title: movie.title, poster: movie.poster, year: movie.year, imdb: movie.imdb }];
+        updated = [...prev, { id: movie.id, title: movie.title, poster: movie.poster, year: movie.year }];
         track("wishlist_added");
       }
       localStorage.setItem(wishlistKey, JSON.stringify(updated));
@@ -1126,6 +1189,114 @@ export default function CineMatch() {
       return updated;
     });
   };
+
+  // ─── IMPORT LETTERBOXD / IMDb ─────────────────────────────────────────────
+  const [importFrom, setImportFrom] = useState("seen");     // ecran de retour
+  const [importRun, setImportRun] = useState(null);         // { done, total } pendant l'import
+  const [importError, setImportError] = useState(null);     // "format" | "empty" | "network"
+  const [importResult, setImportResult] = useState(null);
+  const [imdbFiles, setImdbFiles] = useState({ seen: null, wish: null }); // { name, items, skipped }
+  const [showAllMissing, setShowAllMissing] = useState(false);
+  const lbInput = useRef(null);
+  const imdbSeenInput = useRef(null);
+  const imdbWishInput = useRef(null);
+
+  const openImport = (from) => {
+    setImportFrom(from); setImportError(null); setImportRun(null);
+    setScreen("import");
+  };
+
+  // Ajoute les films retrouves aux listes, sans doublon ni effacement
+  const runImport = async (source, seenItems, wishItems, skipped = 0) => {
+    const tag = (arr, dest) => arr.map((x) => ({ ...x, dest }));
+    const seenKeys = new Set();
+    const all = [...tag(seenItems, "seen"), ...tag(wishItems, "wish")].filter((x) => {
+      const k = `${x.dest}|${x.imdbId || `${x.title}|${x.year}`}`;
+      if (seenKeys.has(k)) return false;
+      seenKeys.add(k);
+      return true;
+    });
+    if (all.length === 0) { setImportError("empty"); return; }
+    setImportError(null);
+    setImportRun({ done: 0, total: all.length });
+    let found;
+    try {
+      found = await resolveItems(all, (done, total) => setImportRun({ done, total }));
+    } catch {
+      setImportRun(null);
+      setImportError("network");
+      return;
+    }
+
+    const newSeenIds = new Set(seenIds);
+    const newSeenMovies = [...seenMovies];
+    const knownSeenMovies = new Set(seenMovies.map((m) => m.id));
+    const newWishlist = [...wishlist];
+    const knownWish = new Set(wishlist.map((m) => m.id));
+    const notFound = [];
+    let addedSeen = 0, addedWish = 0, already = 0;
+
+    all.forEach((item, i) => {
+      const m = found[i];
+      if (!m) { notFound.push(item.label || item.title || item.imdbId); return; }
+      const entry = { id: m.id, title: m.title, poster: m.poster, year: m.year };
+      if (item.dest === "seen") {
+        if (newSeenIds.has(m.id)) { already++; if (!knownSeenMovies.has(m.id)) { newSeenMovies.push(entry); knownSeenMovies.add(m.id); } return; }
+        newSeenIds.add(m.id); newSeenMovies.push(entry); knownSeenMovies.add(m.id); addedSeen++;
+      } else {
+        if (knownWish.has(m.id)) { already++; return; }
+        knownWish.add(m.id); newWishlist.push(entry); addedWish++;
+      }
+    });
+
+    setSeenIds(newSeenIds);
+    localStorage.setItem(seenKey, JSON.stringify([...newSeenIds].map(Number)));
+    setSeenMovies(newSeenMovies);
+    localStorage.setItem(seenMoviesKey, JSON.stringify(newSeenMovies));
+    setWishlist(newWishlist);
+    localStorage.setItem(wishlistKey, JSON.stringify(newWishlist));
+
+    track("import_done", { source, seen: addedSeen, wish: addedWish, not_found: notFound.length, already });
+    setImportRun(null);
+    setImdbFiles({ seen: null, wish: null });
+    setShowAllMissing(false);
+    setImportResult({ addedSeen, addedWish, already, notFound, skipped });
+    setScreen("importResult");
+  };
+
+  const onLetterboxdFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImportError(null);
+    try {
+      const { seen, wish } = await readLetterboxd(file);
+      await runImport("letterboxd", seen, wish);
+    } catch {
+      setImportRun(null);
+      setImportError("format");
+    }
+  };
+
+  const onImdbFile = (slot) => async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImportError(null);
+    try {
+      const { items, skipped } = await readImdb(file);
+      setImdbFiles((prev) => ({ ...prev, [slot]: { name: file.name, items, skipped } }));
+    } catch {
+      setImportError("format");
+    }
+  };
+
+  const startImdbImport = () => runImport(
+    "imdb",
+    imdbFiles.seen?.items || [],
+    imdbFiles.wish?.items || [],
+    (imdbFiles.seen?.skipped || 0) + (imdbFiles.wish?.skipped || 0),
+  );
 
   const copyLink = () => {
     const url = `${window.location.origin}?join=${sessionCode}`;
@@ -1215,6 +1386,47 @@ useEffect(() => {
   const linkBtn = (active) => ({ background: "none", border: "none", color: active ? T.coral : T.blue, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: T.body, textDecoration: "underline", textUnderlineOffset: 3, minHeight: 44, padding: "0 4px" });
   const listRow = { display: "flex", alignItems: "center", gap: 12, background: T.surface, border: `2px solid ${T.ink}`, borderRadius: 12, padding: "10px 12px" };
   const removeBtn = { background: "transparent", border: `2px solid ${T.ink}`, borderRadius: 10, width: 44, height: 44, cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" };
+  // Bloc d'appel a l'import, en haut de « Ma liste » et « Déjà vus »
+  const importCard = (from) => (
+    <div style={{ background: T.surface, border: `2px solid ${T.ink}`, borderRadius: 14, boxShadow: `3px 3px 0 ${T.ink}`, padding: "14px 16px", marginBottom: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <span style={{ flexShrink: 0 }}><Icon name="download" size={28} color={T.blue} /></span>
+        <div style={{ fontSize: 15, lineHeight: 1.45 }}>Vos films sont déjà sur Letterboxd ou IMDb ? Importez-les en une fois, sans tout cocher à la main.</div>
+      </div>
+      <button onClick={() => openImport(from)} style={{ height: 48, border: `2px solid ${T.blue}`, borderRadius: 12, background: "transparent", color: T.blue, fontFamily: T.body, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Importer mes films</button>
+    </div>
+  );
+  // Etapes numerotees des tutoriels
+  const steps = (items) => (
+    <ol style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 14, marginBottom: 18 }}>
+      {items.map((txt, i) => (
+        <li key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+          <span style={{ width: 30, height: 30, borderRadius: "50%", background: i === items.length - 1 ? T.coral : T.ink, color: i === items.length - 1 ? T.white : T.paper, fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</span>
+          <span style={{ fontSize: 15, lineHeight: 1.5, paddingTop: 4 }}>{txt}</span>
+        </li>
+      ))}
+    </ol>
+  );
+  const extLink = (href, label) => <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: T.blue, fontWeight: 700 }}>{label}</a>;
+  const importErrorBox = importError && (
+    <div role="alert" style={{ display: "flex", gap: 10, alignItems: "flex-start", border: `2px solid ${T.red}`, borderRadius: 12, padding: "10px 12px", marginBottom: 14, fontSize: 14, lineHeight: 1.5, background: T.surface }}>
+      <span style={{ flexShrink: 0, marginTop: 1 }}><AlertIcon size={18} /></span>
+      <span>
+        {importError === "format" && "Ce fichier n'est pas celui attendu. Vérifiez que vous avez choisi le bon export, puis réessayez."}
+        {importError === "empty" && "Aucun film trouvé dans ce fichier."}
+        {importError === "network" && "La connexion a été coupée pendant l'import. Rien n'a été ajouté : réessayez."}
+      </span>
+    </div>
+  );
+  const importProgress = importRun && (
+    <div role="status" style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Recherche des films… {importRun.done} / {importRun.total}</div>
+      <div style={{ height: 10, background: C.soft, border: `2px solid ${T.ink}`, borderRadius: 999, overflow: "hidden" }}>
+        <div style={{ height: "100%", background: T.coral, width: `${importRun.total ? (importRun.done / importRun.total) * 100 : 0}%`, transition: "width 0.3s" }} />
+      </div>
+      <div style={{ fontSize: 13, color: C.sub, marginTop: 8 }}>Gardez cette page ouverte.</div>
+    </div>
+  );
   const stackBehind = (n) => ({ position: "absolute", inset: 0, borderRadius: 16, background: n === 2 ? "rgba(244,235,221,0.08)" : "rgba(244,235,221,0.16)", border: "2px solid rgba(244,235,221,0.2)", transform: n === 2 ? "scale(0.9) translateY(18px)" : "scale(0.95) translateY(9px)" });
 
   return (
@@ -1469,7 +1681,7 @@ useEffect(() => {
               <div style={{ position: "relative", height: 440, marginBottom: 20 }}>
                 {movieIdx + 2 < movies.length && <div style={stackBehind(2)} />}
                 {movieIdx + 1 < movies.length && <div style={stackBehind(1)} />}
-                <MovieCard key={`${selGenre?.id}-${movieIdx}`} movie={cur} onSwipe={onMovieSwipe} onDetail={() => setDetail(cur)} seenIds={seenIds} onToggleSeen={toggleSeen} wishlist={wishlist} onToggleWishlist={toggleWishlist} />
+                <MovieCard key={`${selGenre?.id}-${movieIdx}`} movie={cur} rating={ratings[cur.id]} onSwipe={onMovieSwipe} onDetail={() => setDetail(cur)} seenIds={seenIds} onToggleSeen={toggleSeen} wishlist={wishlist} onToggleWishlist={toggleWishlist} />
               </div>
               <div style={{ display: "flex", justifyContent: "center", gap: 40, marginBottom: 12 }}>
                 <button onClick={() => onMovieSwipe(false)} aria-label="Je passe" style={swipeBtn(false, C)}><Icon name="x" size={28} color={C.ink} /></button>
@@ -1567,6 +1779,7 @@ useEffect(() => {
                   </div>
                 </div>
                 <RatingSlider C={C} value={mood.ratingMin} onChange={(v) => saveMood({ ...mood, ratingMin: v })} />
+                <div style={{ fontSize: 13, color: C.sub, marginTop: 8, lineHeight: 1.5 }}>Basée sur la note des spectateurs TMDB, en général proche de celle d'IMDb.</div>
               </div>
 
               {/* DUREE */}
@@ -1641,6 +1854,7 @@ useEffect(() => {
                 <div style={h2}>Ma liste</div>
                 <BackLink onClick={() => setScreen("home")} C={C} />
               </div>
+              {importCard("wishlist")}
               {wishlist.length === 0 ? (
                 <div style={{ textAlign: "center", paddingTop: 36, fontSize: 16, lineHeight: 1.5 }}>
                   <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><Icon name="bookmark" size={44} color={T.blue} /></div>
@@ -1659,7 +1873,7 @@ useEffect(() => {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</div>
-                        <div style={{ fontSize: 14, color: C.sub, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>{m.year}{m.imdb ? <> · <Icon name="star" size={12} color={T.coral} /> {String(m.imdb).replace(".", ",")}</> : ""}</div>
+                        <div style={{ fontSize: 14, color: C.sub, marginTop: 2 }}>{m.year}</div>
                       </div>
                       <button onClick={() => removeWishlist(m.id)} style={removeBtn} aria-label={`Retirer ${m.title}`}><Icon name="x" size={16} color={T.ink} /></button>
                     </div>
@@ -1679,6 +1893,7 @@ useEffect(() => {
                 <div style={h2}>Déjà vus</div>
                 <BackLink onClick={() => setScreen("home")} C={C} />
               </div>
+              {importCard("seen")}
               {seenIds.size === 0 ? (
                 <div style={{ textAlign: "center", paddingTop: 36, fontSize: 16 }}>
                   <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><Icon name="check" size={44} color={T.blue} /></div>
@@ -1696,7 +1911,7 @@ useEffect(() => {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</div>
-                        <div style={{ fontSize: 14, color: C.sub, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>{m.year}{m.imdb ? <> · <Icon name="star" size={12} color={T.coral} /> {String(m.imdb).replace(".", ",")}</> : ""}</div>
+                        <div style={{ fontSize: 14, color: C.sub, marginTop: 2 }}>{m.year}</div>
                       </div>
                       <button onClick={() => removeSeen(m.id)} style={removeBtn} aria-label={`Retirer ${m.title}`}><Icon name="x" size={16} color={T.ink} /></button>
                     </div>
@@ -1714,6 +1929,135 @@ useEffect(() => {
             </div>
           )}
 
+          {/* IMPORT : CHOIX DE LA SOURCE */}
+          {screen === "import" && (
+            <div style={{ paddingTop: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 12 }}>
+                <div style={h2}>Importer mes films</div>
+                <BackLink onClick={() => setScreen(importFrom)} C={C} />
+              </div>
+              <div style={{ fontSize: 16, lineHeight: 1.5, marginBottom: 20 }}>Les films que vous avez vus vont dans « Déjà vus », ceux que vous voulez voir dans « Ma liste ». Rien de ce qui s'y trouve déjà n'est effacé.</div>
+              <div style={{ ...eyebrow, marginBottom: 12 }}>D'où viennent vos films ?</div>
+              {[
+                { to: "importLetterboxd", name: "Letterboxd", desc: "Un fichier ZIP : films vus et watchlist", letter: "L", bg: T.blue, fg: T.white },
+                { to: "importImdb", name: "IMDb", desc: "Un ou deux fichiers CSV : vos notes et votre watchlist", letter: "I", bg: T.yellow, fg: T.ink },
+              ].map((o) => (
+                <button key={o.to} className="cm-btn" onClick={() => { setImportError(null); setScreen(o.to); }}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, background: T.surface, border: `2px solid ${T.ink}`, borderRadius: 14, boxShadow: `3px 3px 0 ${T.ink}`, padding: 16, marginBottom: 14, cursor: "pointer", textAlign: "left", fontFamily: T.body, color: T.ink }}>
+                  <span style={{ width: 44, height: 44, borderRadius: 10, background: o.bg, color: o.fg, fontFamily: T.display, fontSize: 20, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{o.letter}</span>
+                  <span style={{ flex: 1 }}>
+                    <span style={{ display: "block", fontSize: 18, fontWeight: 700 }}>{o.name}</span>
+                    <span style={{ display: "block", fontSize: 14, color: "#5E5260", marginTop: 2 }}>{o.desc}</span>
+                  </span>
+                  <Icon name="chevron" size={20} color={T.ink} />
+                </button>
+              ))}
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, lineHeight: 1.5, color: C.sub, marginTop: 10 }}>
+                <span style={{ flexShrink: 0, marginTop: 2 }}><Icon name="lock" size={18} color={C.sub} /></span>
+                <span>Votre fichier est lu sur ce téléphone. Seuls les titres des films sont envoyés pour les retrouver, rien n'est conservé.</span>
+              </div>
+            </div>
+          )}
+
+          {/* IMPORT : LETTERBOXD */}
+          {screen === "importLetterboxd" && (
+            <div style={{ paddingTop: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 12 }}>
+                <div style={h2}>Depuis Letterboxd</div>
+                {!importRun && <BackLink onClick={() => setScreen("import")} C={C} />}
+              </div>
+              <div style={{ fontSize: 15, lineHeight: 1.5, marginBottom: 18 }}>Letterboxd vous donne toutes vos données dans un seul fichier. Comptez une minute.</div>
+              {steps([
+                <>Ouvrez {extLink("https://letterboxd.com/settings/data/", "letterboxd.com/settings/data")} dans votre navigateur et connectez-vous.</>,
+                <>Appuyez sur <strong>Export your data</strong>.</>,
+                <>Un fichier <strong>letterboxd-pseudo-date.zip</strong> arrive dans vos téléchargements.</>,
+                <>Revenez ici et choisissez ce fichier, <strong>sans le décompresser</strong>.</>,
+              ])}
+              <div style={{ background: T.surface, border: `2px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 14, lineHeight: 1.6, marginBottom: 20 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Ce qui sera importé</div>
+                <div>Vos films vus → Déjà vus</div>
+                <div>Votre watchlist → Ma liste</div>
+              </div>
+              {importErrorBox}
+              <input ref={lbInput} type="file" accept=".zip,.csv,application/zip" onChange={onLetterboxdFile} style={{ display: "none" }} />
+              {importRun ? importProgress : <Btn onClick={() => lbInput.current?.click()}>Choisir le fichier ZIP</Btn>}
+            </div>
+          )}
+
+          {/* IMPORT : IMDb */}
+          {screen === "importImdb" && (
+            <div style={{ paddingTop: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 12 }}>
+                <div style={h2}>Depuis IMDb</div>
+                {!importRun && <BackLink onClick={() => setScreen("import")} C={C} />}
+              </div>
+              <div style={{ fontSize: 15, lineHeight: 1.5, marginBottom: 18 }}>IMDb exporte deux listes séparées. Importez l'une, l'autre ou les deux.</div>
+              {steps([
+                <>Sur {extLink("https://www.imdb.com/", "imdb.com")}, ouvrez le menu de votre profil puis <strong>Vos notes</strong>. Touchez les trois points, puis <strong>Exporter</strong>.</>,
+                <>Faites de même avec <strong>Votre watchlist</strong>.</>,
+                <>IMDb prépare les fichiers en quelques minutes. Téléchargez-les sur {extLink("https://www.imdb.com/exports/", "imdb.com/exports")}, puis choisissez-les ci-dessous.</>,
+              ])}
+              <input ref={imdbSeenInput} type="file" accept=".csv,text/csv" onChange={onImdbFile("seen")} style={{ display: "none" }} />
+              <input ref={imdbWishInput} type="file" accept=".csv,text/csv" onChange={onImdbFile("wish")} style={{ display: "none" }} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+                {[
+                  { slot: "seen", label: "Vos notes → Déjà vus", hint: "ratings.csv", input: imdbSeenInput },
+                  { slot: "wish", label: "Votre watchlist → Ma liste", hint: "watchlist.csv", input: imdbWishInput },
+                ].map(({ slot, label, hint, input }) => {
+                  const f = imdbFiles[slot];
+                  return (
+                    <div key={slot} style={{ display: "flex", alignItems: "center", gap: 12, background: T.surface, border: f ? `2px solid ${T.green}` : `2px dashed rgba(52,42,54,0.4)`, borderRadius: 12, padding: "10px 12px" }}>
+                      <span style={{ flexShrink: 0 }}><Icon name={f ? "check" : "file"} size={22} color={f ? T.green : "#5E5260"} /></span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700 }}>{label}</div>
+                        <div style={{ fontSize: 13, color: "#5E5260", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {f ? `${f.name} · ${f.items.length} film${f.items.length > 1 ? "s" : ""}` : `${hint} · facultatif`}
+                        </div>
+                      </div>
+                      <button onClick={() => input.current?.click()} disabled={!!importRun}
+                        style={{ height: 44, padding: "0 12px", borderRadius: 10, border: `2px solid ${f ? T.ink : T.blue}`, background: "transparent", color: f ? T.ink : T.blue, fontFamily: T.body, fontSize: 14, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                        {f ? "Changer" : "Choisir"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              {importErrorBox}
+              {importRun ? importProgress : <Btn onClick={startImdbImport} disabled={!imdbFiles.seen && !imdbFiles.wish}>Lancer l'import</Btn>}
+            </div>
+          )}
+
+          {/* IMPORT : RESULTAT */}
+          {screen === "importResult" && importResult && (() => {
+            const r = importResult;
+            const total = r.addedSeen + r.addedWish;
+            const missing = showAllMissing ? r.notFound : r.notFound.slice(0, 3);
+            return (
+              <div style={{ paddingTop: 24 }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 10, marginBottom: 22 }}>
+                  <div style={{ width: 72, height: 72, borderRadius: "50%", background: T.green, border: `2px solid ${T.ink}`, boxShadow: `3px 3px 0 ${T.ink}`, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="check" size={34} color={T.white} /></div>
+                  <div style={{ fontFamily: T.display, fontSize: 30, lineHeight: 1.05 }}>{total} film{total > 1 ? "s" : ""} importé{total > 1 ? "s" : ""}</div>
+                  <div style={{ fontSize: 16, lineHeight: 1.5 }}>{r.addedSeen} dans Déjà vus · {r.addedWish} dans Ma liste</div>
+                  {r.already > 0 && <div style={{ fontSize: 14, color: C.sub }}>{r.already} y étaient déjà.</div>}
+                </div>
+                {r.notFound.length > 0 && (
+                  <div style={{ background: T.surface, border: `2px solid ${T.ink}`, borderRadius: 12, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontWeight: 700 }}><AlertIcon size={18} />{r.notFound.length} film{r.notFound.length > 1 ? "s" : ""} non reconnu{r.notFound.length > 1 ? "s" : ""}</div>
+                    <div style={{ fontSize: 14, lineHeight: 1.5, color: "#5E5260" }}>Ajoutez-les à la main depuis une carte si besoin.</div>
+                    <div style={{ fontSize: 14, lineHeight: 1.7 }}>{missing.map((t, i) => <div key={i}>{t}</div>)}</div>
+                    {!showAllMissing && r.notFound.length > 3 && (
+                      <button onClick={() => setShowAllMissing(true)} style={{ alignSelf: "flex-start", minHeight: 44, background: "none", border: "none", padding: 0, fontFamily: T.body, fontSize: 14, fontWeight: 700, color: T.blue, cursor: "pointer" }}>Voir les {r.notFound.length - 3} autres</button>
+                    )}
+                  </div>
+                )}
+                <div style={{ fontSize: 13, lineHeight: 1.5, color: C.sub, marginBottom: 22 }}>
+                  {r.skipped > 0 ? `${r.skipped} titre${r.skipped > 1 ? "s ignorés" : " ignoré"} (séries, épisodes, courts métrages). ` : ""}Pour mettre à jour vos listes plus tard, refaites un import : rien ne sera compté deux fois.
+                </div>
+                <Btn onClick={() => setScreen(importFrom)}>Terminé</Btn>
+              </div>
+            );
+          })()}
+
           {/* MENTIONS LEGALES */}
           {screen === "legal" && <LegalScreen onBack={() => setScreen("home")} C={C} />}
 
@@ -1729,8 +2073,8 @@ useEffect(() => {
         </div>
 
         {genreMatch && <MatchModal item={genreMatch} type="genre" solo={isSolo} onClose={() => { setGenreMatch(null); }} />}
-        {movieMatch && <MatchModal item={movieMatch} type="movie" solo={isSolo} onClose={() => { setMovieMatch(null); setScreen("final"); }} />}
-        {detail && <DetailPanel movie={detail} onClose={() => setDetail(null)} />}
+        {movieMatch && <MatchModal item={movieMatch} type="movie" solo={isSolo} rating={ratings[movieMatch.id]} onClose={() => { setMovieMatch(null); setScreen("final"); }} />}
+        {detail && <DetailPanel movie={detail} rating={ratings[detail.id]} onClose={() => setDetail(null)} />}
 
         {/* Confirmation avant d'abandonner une partie en cours */}
         {confirmHome && (
