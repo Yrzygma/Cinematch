@@ -175,7 +175,7 @@ export default async function handler(req, res) {
           .then((r) => r.json()).catch(() => null)
       )),
       Promise.all(rawMovies.map((m) =>
-        fetch(`${TMDB_BASE}/movie/${m.id}/videos?api_key=${TMDB_KEY}&language=fr-FR`)
+        fetch(`${TMDB_BASE}/movie/${m.id}/videos?api_key=${TMDB_KEY}&language=fr-FR&include_video_language=fr,en,null`)
           .then((r) => r.json()).catch(() => null)
       )),
     ]);
