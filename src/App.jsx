@@ -533,6 +533,14 @@ function MovieCard({ movie, rating, onSwipe, onDetail, seenIds, onToggleSeen, wi
               <ScoreBadges rating={rating} />
             </div>
           </div>
+          {movie.trailerKey && (
+            <a {...stop} href={`https://www.youtube.com/watch?v=${movie.trailerKey}`} target="_blank" rel="noopener noreferrer"
+              onClick={e => { e.stopPropagation(); track("trailer_opened", { from: "card" }); }}
+              aria-label={`Voir la bande-annonce de ${movie.title}`} title="Bande-annonce"
+              style={{ flexShrink: 0, width: 40, height: 40, borderRadius: 10, background: T.coral, boxShadow: `2px 2px 0 ${T.ink}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Icon name="play" size={16} color={T.white} />
+            </a>
+          )}
           <button {...stop} onClick={e => { e.stopPropagation(); onDetail(); }}
             style={{ flexShrink: 0, background: "transparent", border: `2px solid ${T.blue}`, borderRadius: 10, height: 40, padding: "0 12px", color: T.blue, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: T.body }}>
             Infos
@@ -582,6 +590,7 @@ function DetailPanel({ movie, rating, onClose }) {
           )}
           {movie.trailerKey && (
             <a href={`https://www.youtube.com/watch?v=${movie.trailerKey}`} target="_blank" rel="noopener noreferrer"
+              onClick={() => track("trailer_opened", { from: "infos" })}
               style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, height: 56, background: T.coral, borderRadius: 12, color: T.white, fontWeight: 700, fontSize: 16, textDecoration: "none", marginBottom: 20, boxShadow: `3px 3px 0 ${T.ink}` }}>
               <Icon name="play" size={18} color={T.white} /> Voir la bande-annonce
             </a>
@@ -625,6 +634,7 @@ function MatchModal({ item, type, solo, rating, onClose, onContinue }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {item.trailerKey && (
                   <a href={`https://www.youtube.com/watch?v=${item.trailerKey}`} target="_blank" rel="noopener noreferrer"
+                    onClick={() => track("trailer_opened", { from: "match" })}
                     style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, height: 56, background: T.coral, borderRadius: 12, color: T.white, fontWeight: 700, fontSize: 16, textDecoration: "none", boxShadow: `3px 3px 0 ${T.ink}` }}>
                     <Icon name="play" size={16} color={T.white} /> Voir la bande-annonce
                   </a>
