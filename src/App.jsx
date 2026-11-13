@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { initAnalytics, track } from "./analytics.js";
 import { readLetterboxd, readImdb, resolveItems } from "./importers.js";
@@ -231,20 +231,65 @@ function isNetworkError(error) {
   return !error.code || msg.includes("fetch") || msg.includes("network");
 }
 
+// Codes de session : sans caracteres ambigus (ni 0/O, ni 1/I/L)
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 function generateCode() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
+  const a = new Uint32Array(6);
+  crypto.getRandomValues(a);
+  return [...a].map((n) => CODE_ALPHABET[n % CODE_ALPHABET.length]).join("");
 }
 
 function generateUserId() {
   return Math.random().toString(36).substring(2, 12);
 }
 
+// Votes de genre : movie_id negatif = -(manche * 100 + index + 1).
+// La manche augmente quand on recommence les genres faute de genre en commun.
+const genreVoteId = (round, idx) => -(round * 100 + idx + 1);
+function decodeGenreVote(movieId) {
+  const n = -movieId - 1;
+  return { round: Math.floor(n / 100), idx: n % 100 };
+}
+
+// Cle d'une liste de films partagee : "genre:aleatoire". Une nouvelle cle
+// = une nouvelle liste (relance d'un genre, changement de genre).
+const newListKey = (genreId) => `${genreId}:${Math.random().toString(36).slice(2, 7)}`;
+const genreOfKey = (key) => String(key || "").split(":")[0];
+
+// Session en cours, gardee 3 h pour pouvoir la reprendre apres un rechargement
+const ACTIVE_KEY = "cmActiveSession";
+const ACTIVE_TTL = 3 * 60 * 60 * 1000;
+// Chaque onglet retrouve d'abord sa propre session (sessionStorage), sinon la
+// derniere session de ce navigateur (localStorage, survit a la fermeture de l'app).
+function loadActive() {
+  const read = (store) => {
+    try {
+      const s = JSON.parse(store.getItem(ACTIVE_KEY) || "null");
+      if (!s || !s.code || !s.pid || Date.now() - s.at > ACTIVE_TTL) return null;
+      return s;
+    } catch { return null; }
+  };
+  return read(sessionStorage) || read(localStorage);
+}
+function saveActive(s) {
+  const v = JSON.stringify({ ...s, at: Date.now() });
+  try { sessionStorage.setItem(ACTIVE_KEY, v); } catch {}
+  try { localStorage.setItem(ACTIVE_KEY, v); } catch {}
+}
+function clearActive() {
+  try { sessionStorage.removeItem(ACTIVE_KEY); } catch {}
+  try { localStorage.removeItem(ACTIVE_KEY); } catch {}
+}
+
+// Leve une erreur si le serveur ne repond pas correctement : une panne ne doit
+// pas etre confondue avec « aucun film ne correspond ».
 async function fetchMovies(genreId, providers = [], mood = null) {
-  const page = Math.floor(Math.random() * 5) + 1;
   const providerParam = providers.length > 0 ? `&providers=${providers.join(',')}` : '';
   const moodParam = mood ? `&mood=${encodeURIComponent(JSON.stringify(mood))}` : '';
-  const res = await fetch(`/api/movies?genre=${genreId}&page=${page}${providerParam}${moodParam}`);
-  const data = await res.json();
+  const res = await fetch(`/api/movies?genre=${genreId}${providerParam}${moodParam}`);
+  let data = null;
+  try { data = await res.json(); } catch {}
+  if (!res.ok || !data || data.error) throw new Error(data?.error || `HTTP ${res.status}`);
   // { movies: [...], empty?: { reason, availableElsewhere } }
   return { movies: data.movies || [], empty: data.empty || null };
 }
@@ -548,7 +593,7 @@ function DetailPanel({ movie, rating, onClose }) {
   );
 }
 
-function MatchModal({ item, type, solo, rating, onClose }) {
+function MatchModal({ item, type, solo, rating, onClose, onContinue }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(43,35,48,0.82)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 16, overflowY: "auto" }}>
       <div role="dialog" aria-modal="true" aria-label="C'est un match" className="cm-pop" style={{ position: "relative", overflow: "hidden", background: T.paper, color: T.ink, border: `2px solid ${T.ink}`, borderRadius: 18, boxShadow: `5px 5px 0 ${T.coral}`, padding: "24px 22px 22px", textAlign: "center", maxWidth: 360, width: "100%" }}>
@@ -586,6 +631,9 @@ function MatchModal({ item, type, solo, rating, onClose }) {
                 )}
                 <ShareMatchButton title={item.title} />
                 <button onClick={onClose} style={{ height: 48, border: "none", borderRadius: 12, background: T.yellow, color: T.ink, fontFamily: T.body, fontWeight: 700, fontSize: 16, cursor: "pointer" }}>Terminer</button>
+                {onContinue && (
+                  <button onClick={onContinue} style={{ minHeight: 44, background: "none", border: "none", color: T.blue, fontFamily: T.body, fontWeight: 700, fontSize: 15, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>Continuer à chercher</button>
+                )}
               </div>
             </>
           )}
@@ -598,15 +646,16 @@ function MatchModal({ item, type, solo, rating, onClose }) {
 function ShareMatchButton({ title }) {
   const [copied, setCopied] = useState(false);
   const text = `On regarde « ${title} » ce soir ! Trouvé avec CinéMatch`;
+  const url = `${APP_URL}/?utm_source=partage`;
   const share = async () => {
     if (navigator.share) {
       try {
-        await navigator.share({ title: "CinéMatch", text, url: APP_URL });
+        await navigator.share({ title: "CinéMatch", text, url });
         track("match_shared", { method: "native" });
         return;
       } catch {}
     }
-    navigator.clipboard.writeText(`${text}\n${APP_URL}`).then(() => {
+    navigator.clipboard.writeText(`${text}\n${url}`).then(() => {
       track("match_shared", { method: "clipboard" });
       setCopied(true); setTimeout(() => setCopied(false), 2000);
     });
@@ -639,6 +688,25 @@ function ErrorBox({ title, children }) {
   );
 }
 
+// Le plus rapide attend l'autre : progression du partenaire en direct
+function WaitPartner({ title, text, done, total, C, children }) {
+  return (
+    <div style={{ textAlign: "center", paddingTop: 48 }}>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}><Matches size={130} ink={T.paper} /></div>
+      <div style={{ fontFamily: T.display, fontSize: 26, lineHeight: 1.05, color: C.ink, marginBottom: 10 }}>{title}</div>
+      <div style={{ fontSize: 16, lineHeight: 1.5, color: C.mid, marginBottom: 24 }}>{text}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left" }} role="status" aria-label={`Progression : ${done} sur ${total}`}>
+        <div style={{ flex: 1, height: 8, background: C.soft, borderRadius: 999, overflow: "hidden" }}>
+          <div style={{ height: "100%", background: T.yellow, borderRadius: 999, width: `${total ? (done / total) * 100 : 0}%`, transition: "width 0.3s" }} />
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: "nowrap" }}>{done} / {total}</div>
+      </div>
+      <div style={{ fontSize: 13, color: C.mid, marginTop: 8, textAlign: "left" }}>Progression de votre partenaire</div>
+      {children}
+    </div>
+  );
+}
+
 // Boutons de swipe : « je passe » en contour neutre, « j'aime » en corail
 function swipeBtn(like, C) {
   return like
@@ -659,7 +727,7 @@ function LegalScreen({ onBack, C }) {
 
       <H>Éditeur</H>
       <P>CinéMatch est un projet personnel édité par un particulier, à titre non professionnel et sans activité commerciale. Conformément à l'article 6-III-2 de la loi n° 2004-575 du 21 juin 2004 (LCEN), l'éditeur a choisi de rester anonyme ; ses coordonnées ont été communiquées à l'hébergeur.</P>
-      <P>Contact : <A href="https://github.com/Yrzygma/cin-match/issues">via la page du projet sur GitHub</A>.</P>
+      <P>Contact : <A href="https://github.com/Yrzygma/Cinematch/issues">via la page du projet sur GitHub</A>.</P>
 
       <H>Hébergement</H>
       <P>Site : Vercel Inc., 440 North Barranca Avenue, Suite 4133, Covina, CA 91723, États-Unis — +1 (951) 383-6898.</P>
@@ -670,6 +738,7 @@ function LegalScreen({ onBack, C }) {
       <P><strong>Import Letterboxd ou IMDb.</strong> Le fichier que vous choisissez est lu sur votre appareil. Seuls les titres des films (ou leurs identifiants IMDb) sont envoyés à notre serveur pour retrouver les films correspondants ; ils ne sont pas conservés.</P>
       <P><strong>Pendant une session à deux.</strong> Le prénom saisi, le code de session et vos votes (genres et films) sont enregistrés sur Supabase pour permettre la synchronisation en temps réel. Ces données sont supprimées automatiquement au bout de 30 jours.</P>
       <P><strong>Mesure d'audience.</strong> Des statistiques d'usage anonymes (par exemple « session créée », « match trouvé ») sont envoyées à PostHog, hébergé dans l'Union européenne. Aucun cookie n'est déposé, aucun nom ni e-mail n'est collecté, aucune donnée n'est revendue ni utilisée à des fins publicitaires. Ces mesures servent uniquement à améliorer l'app.</P>
+      <P><strong>Vos avis.</strong> Si vous répondez à la question de fin de séance ou nous écrivez un message depuis l'app, la réponse et le texte sont enregistrés avec ces statistiques anonymes. N'y indiquez pas d'informations personnelles.</P>
       <P>Conformément au RGPD, vous pouvez demander l'accès à vos données ou leur suppression via le contact ci-dessus.</P>
 
       <H>Crédits</H>
@@ -693,10 +762,17 @@ function BackLink({ onClick, C }) {
 export default function CineMatch() {
   const selGenreRef = useRef(null);
 
-  // Session
+  // Identifiant local (listes, reglages, mesure d'audience) : un par navigateur
   const [userId] = useState(() => localStorage.getItem("userId") || (() => { const id = generateUserId(); localStorage.setItem("userId", id); return id; })());
+  // Identifiant de participant : un par session et par onglet. Deux onglets du
+  // meme navigateur sont ainsi deux participants distincts.
+  const pidRef = useRef(null);
+
+  // Session
   const [sessionId, setSessionId] = useState(null);
+  const [isHost, setIsHost] = useState(false);
   const [partnerConnected, setPartnerConnected] = useState(false);
+  const [partnerLeft, setPartnerLeft] = useState(false);
   const [screen, setScreen] = useState("home");
   const [joinCode, setJoinCode] = useState("");
   const [myName, setMyName] = useState("");
@@ -706,6 +782,9 @@ export default function CineMatch() {
   const [createError, setCreateError] = useState(null); // "network" | null
   const [joinError, setJoinError] = useState(null);     // "notfound" | "network" | null
   const [busy, setBusy] = useState(false);
+  const [resumable, setResumable] = useState(() => loadActive());
+  const [resumeError, setResumeError] = useState(false);
+  const [notice, setNotice] = useState(null);           // { kind: "info" | "left", text? }
   const [selectedProviders, setSelectedProviders] = useState(() => {
     const saved = JSON.parse(localStorage.getItem('selectedProviders') || '[]');
     // Migration : Canal+ est passe de l'ID 190 a 381 (meilleur catalogue)
@@ -751,21 +830,29 @@ export default function CineMatch() {
     localStorage.setItem('mood', JSON.stringify(next));
   };
 
+  // Votes du partenaire tels qu'enregistres dans Supabase : { [movie_id]: liked }.
+  // Source unique de verite, reconstruite a chaque resynchronisation.
+  const [partnerVotes, setPartnerVotes] = useState({});
+
   // Genre phase
+  const [genreRound, setGenreRound] = useState(0);
   const [genreIdx, setGenreIdx] = useState(0);
   const [myGenreLikes, setMyGenreLikes] = useState(new Set());
-  const [partnerGenreLikes, setPartnerGenreLikes] = useState(new Set());
-  const [matchedGenres, setMatchedGenres] = useState([]);
   const [genreMatch, setGenreMatch] = useState(null);
   const [genreMatchQueue, setGenreMatchQueue] = useState([]);
-  const [pendingGenreMatch, setPendingGenreMatch] = useState(null);
+  const shownGenreRef = useRef(new Set());
 
   // Movie phase
   const [selGenre, setSelGenre] = useState(null);
   const [movies, setMovies] = useState([]);
+  const listKeyRef = useRef(null);
+  const [listVersion, setListVersion] = useState(0);    // force de nouvelles cartes a chaque liste
   const [movieIdx, setMovieIdx] = useState(0);
   const [movieMatch, setMovieMatch] = useState(null);
+  const shownMovieRef = useRef(new Set());
+  const [soloPicks, setSoloPicks] = useState([]);       // coups de coeur du mode solo
   const [detail, setDetail] = useState(null);
+  const startedAtRef = useRef(null);                    // debut du swipe, pour la duree jusqu'au match
   const seenKey = `seenIds_${userId}`;
   const seenMoviesKey = `seenMovies_${userId}`;
   const [seenIds, setSeenIds] = useState(() => new Set((JSON.parse(localStorage.getItem(`seenIds_${localStorage.getItem('userId') || 'guest'}`) || "[]")).map(Number)));
@@ -777,14 +864,45 @@ export default function CineMatch() {
   // seulement (quota OMDb). Le serveur les conserve dans Supabase.
   const [ratings, setRatings] = useState({});
   const ratingsAsked = useRef(new Set());
-  const [loading, setLoading] = useState(false);
   const [myMovieLikes, setMyMovieLikes] = useState(new Set());
-  const [partnerMovieLikes, setPartnerMovieLikes] = useState(new Set());
 
+  // Retour de fin de seance
+  const [watchAnswer, setWatchAnswer] = useState(null);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackSent, setFeedbackSent] = useState(false);
+
+  const isSolo = !sessionId;
   const genreDone = genreIdx >= GENRES.length;
   const movieDone = movies.length > 0 && movieIdx >= movies.length;
   const cur = movies[movieIdx];
-  const isSolo = !sessionId;
+  const pName = partnerName || "Votre partenaire";
+
+  // ─── ETAT DU PARTENAIRE, DEDUIT DE SES VOTES ──────────────────────────────
+  const partnerGenre = useMemo(() => {
+    const voted = new Set(), liked = new Set();
+    Object.entries(partnerVotes).forEach(([k, v]) => {
+      const id = Number(k);
+      if (id >= 0) return;
+      const { round, idx } = decodeGenreVote(id);
+      if (round !== genreRound) return;
+      voted.add(idx);
+      if (v) liked.add(idx);
+    });
+    return { voted, liked };
+  }, [partnerVotes, genreRound]);
+  const partnerMovieVoted = useMemo(
+    () => movies.filter((m) => partnerVotes[m.id] !== undefined).length,
+    [partnerVotes, movies]
+  );
+  // Solo : chaque genre aime est retenu. A deux : il faut que les deux l'aiment.
+  const matchedGenres = useMemo(
+    () => GENRES.filter((g, i) => myGenreLikes.has(i) && (isSolo || partnerGenre.liked.has(i))),
+    [myGenreLikes, partnerGenre, isSolo]
+  );
+  const partnerActive = !isSolo && partnerConnected && !partnerLeft;
+  // Le plus rapide attend l'autre au lieu de conclure trop tot
+  const waitGenres = partnerActive && genreDone && partnerGenre.voted.size < GENRES.length;
+  const waitMovies = partnerActive && movieDone && partnerMovieVoted < movies.length;
 
   useEffect(() => {
     if (screen !== "movie" || movies.length === 0) return;
@@ -800,122 +918,160 @@ export default function CineMatch() {
 
   // ─── MESURE D'AUDIENCE ─────────────────────────────────────────────────────
   useEffect(() => { initAnalytics(userId); }, [userId]);
-  useEffect(() => { if (genreMatch) track("genre_match", { genre: genreMatch.id, solo: !sessionId }); }, [genreMatch]);
-  useEffect(() => { if (movieMatch) track("movie_match", { genre: selGenreRef.current?.id, solo: !sessionId }); }, [movieMatch]);
-
-  // ─── SUPABASE REALTIME ────────────────────────────────────────────────────
+  useEffect(() => { if (genreMatch) track("genre_match", { genre: genreMatch.id, solo: isSolo }); }, [genreMatch]);
   useEffect(() => {
-    if (!sessionId) return;
+    if (!movieMatch) return;
+    const seconds = startedAtRef.current ? Math.round((Date.now() - startedAtRef.current) / 1000) : null;
+    track("movie_match", { genre: selGenreRef.current?.id, solo: isSolo, seconds });
+  }, [movieMatch]);
 
-    const channel = supabase
-      .channel(`session:${sessionId}`)
-      .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "votes",
-        filter: `session_id=eq.${sessionId}`,
-      }, (payload) => {
-        const vote = payload.new;
-        if (vote.user_id === userId) return; // ignore own votes
+  // ─── MATCHS (deduits des votes des deux) ──────────────────────────────────
+  // Genres : chaque nouveau genre en commun s'affiche une fois
+  useEffect(() => {
+    if (isSolo) return;
+    const fresh = matchedGenres.filter((g) => !shownGenreRef.current.has(g.id));
+    if (fresh.length === 0) return;
+    fresh.forEach((g) => shownGenreRef.current.add(g.id));
+    setGenreMatchQueue((q) => [...q, ...fresh]);
+  }, [matchedGenres, isSolo]);
 
-        if (vote.movie_id < 0) {
-          // Genre vote: movie_id encodes genre index as negative
-          const gIdx = Math.abs(vote.movie_id) - 1;
-          if (vote.liked) {
-            setPartnerGenreLikes(prev => {
-              const next = new Set(prev);
-              next.add(gIdx);
-              return next;
-            });
-          }
-        } else {
-          // Movie vote
-          if (vote.liked) {
-            setPartnerMovieLikes(prev => {
-              const next = new Set(prev);
-              next.add(vote.movie_id);
-              return next;
-            });
-          }
-        }
-      })
-      .on("postgres_changes", {
-        event: "UPDATE",
-        schema: "public",
-        table: "sessions",
-        filter: `id=eq.${sessionId}`,
-      }, (payload) => {
-        const s = payload.new;
-        if (s.partner_name && s.partner_name !== myName) {
-          setPartnerName(s.partner_name);
-          setPartnerConnected(true);
-        }
-      })
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
-  }, [sessionId, userId, myName]);
-
-// Show genre matches from queue one by one
   useEffect(() => {
     if (!genreMatch && genreMatchQueue.length > 0) {
       setGenreMatch(genreMatchQueue[0]);
-      setGenreMatchQueue(prev => prev.slice(1));
+      setGenreMatchQueue((prev) => prev.slice(1));
     }
   }, [genreMatch, genreMatchQueue]);
 
-// Detect genre match when partner likes a genre we already liked
-// lastPartnerGenre tracks only the most recently added genre to avoid re-triggering
-  const lastPartnerGenreRef = useRef(-1);
+  // Films : un film aime par les deux, pas encore montre
   useEffect(() => {
-    // Find the newest gIdx added by partner (highest value not yet processed)
-    let newGIdx = -1;
-    partnerGenreLikes.forEach(gIdx => {
-      if (gIdx > lastPartnerGenreRef.current) newGIdx = Math.max(newGIdx, gIdx);
+    if (isSolo || screen !== "movie" || movieMatch) return;
+    const m = movies.find((x) => myMovieLikes.has(x.id) && partnerVotes[x.id] === true && !shownMovieRef.current.has(x.id));
+    if (m) { shownMovieRef.current.add(m.id); setMovieMatch(m); }
+  }, [partnerVotes, myMovieLikes, movies, screen, movieMatch, isSolo]);
+
+  // Solo : en fin de liste, on passe au choix parmi les coups de coeur
+  useEffect(() => {
+    if (isSolo && screen === "movie" && movieDone && !movieMatch) setScreen("picks");
+  }, [isSolo, screen, movieDone, movieMatch]);
+
+  // Les bandeaux d'information disparaissent seuls
+  useEffect(() => {
+    if (notice?.kind !== "info") return;
+    const t = setTimeout(() => setNotice(null), 4500);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  // ─── SYNCHRONISATION ──────────────────────────────────────────────────────
+  // Le temps reel ne rejoue pas ce qui s'est passe pendant que l'app etait en
+  // arriere-plan (partage du lien, bande-annonce, ecran verrouille). On relit donc
+  // la session et tous les votes au retour dans l'app, et toutes les 4 s en secours.
+  const applyVoteRows = (rows, replace) => {
+    const pid = pidRef.current;
+    setPartnerVotes((prev) => {
+      const next = replace ? {} : { ...prev };
+      rows.forEach((v) => { if (v && v.user_id !== pid) next[v.movie_id] = v.liked; });
+      const a = Object.keys(prev), b = Object.keys(next);
+      if (a.length === b.length && b.every((k) => prev[k] === next[k])) return prev;
+      return next;
     });
-    if (newGIdx === -1) return;
-    lastPartnerGenreRef.current = newGIdx;
+  };
 
-    if (myGenreLikes.has(newGIdx)) {
-      const genre = GENRES[newGIdx];
-      if (genre) {
-        setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
-        setGenreMatchQueue(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
-      }
+  const onSessionRow = (s) => {
+    if (!s) return;
+    // L'invite est arrive (cote hote)
+    if (isHost && s.partner_name && !partnerConnected) {
+      setPartnerName(s.partner_name);
+      setPartnerConnected(true);
+      track("partner_joined");
+      const saved = loadActive();
+      if (saved) saveActive({ ...saved, partnerName: s.partner_name });
+      if (screen === "waiting") setScreen("genre");
     }
-  }, [partnerGenreLikes]);
-
-
-  // Check for genre match when partner likes update
-  useEffect(() => {
-    if (!pendingGenreMatch) return;
-    const { gIdx, genre } = pendingGenreMatch;
-    if (partnerGenreLikes.has(gIdx)) {
-      setMatchedGenres(prev => [...prev, genre]);
-      setGenreMatch(genre);
-      setPendingGenreMatch(null);
+    // Le partenaire a quitte la session
+    if (typeof s.status === "string" && s.status.startsWith("left_") && s.status !== `left_${pidRef.current}` && !partnerLeft) {
+      setPartnerLeft(true);
+      setNotice({ kind: "left" });
+      track("partner_left_seen", { screen });
     }
-  }, [partnerGenreLikes, pendingGenreMatch]);
+    // Le partenaire a choisi (ou relance) une liste de films
+    if (s.genre_id && s.genre_id.includes(":") && s.genre_id !== listKeyRef.current && s.movie_list
+      && !["home", "waiting", "final", "picks"].includes(screen) && !movieMatch) {
+      const g = GENRES.find((x) => x.id === genreOfKey(s.genre_id));
+      let list = null;
+      try { list = JSON.parse(s.movie_list); } catch {}
+      if (g && Array.isArray(list) && list.length > 0) applyList(g, list, s.genre_id, true);
+    }
+  };
 
-  // Check for movie match when partner likes update
+  const fetchSessionState = (code) => Promise.all([
+    supabase.from("sessions").select("*").eq("id", code).single(),
+    supabase.from("votes").select("user_id, movie_id, liked, created_at").eq("session_id", code).order("created_at", { ascending: true }),
+  ]);
+
+  const resync = async () => {
+    const code = sessionId;
+    if (!code) return;
+    try {
+      const [{ data: s }, { data: v }] = await fetchSessionState(code);
+      if (pidRef.current === null || code !== live.current.sessionId) return; // session quittee entre-temps
+      if (v) live.current.applyVoteRows(v, true);
+      if (s) live.current.onSessionRow(s);
+    } catch {}
+  };
+
+  // Les rappels temps reel et le minuteur appellent toujours les fonctions a jour
+  const live = useRef({});
+  live.current = { applyVoteRows, onSessionRow, resync, sessionId };
+
   useEffect(() => {
-    if (!cur) return;
-    // Only trigger if we already liked this movie
-  }, [partnerMovieLikes]);
+    if (!sessionId) return;
+    const channel = supabase
+      .channel(`session:${sessionId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "votes", filter: `session_id=eq.${sessionId}` },
+        (payload) => live.current.applyVoteRows([payload.new], false))
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "sessions", filter: `id=eq.${sessionId}` },
+        (payload) => live.current.onSessionRow(payload.new))
+      .subscribe((status) => { if (status === "SUBSCRIBED") live.current.resync(); });
 
-  // ─── SESSION CREATION ─────────────────────────────────────────────────────
+    const onWake = () => { if (document.visibilityState === "visible") live.current.resync(); };
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+    window.addEventListener("online", onWake);
+    const timer = setInterval(() => { if (document.visibilityState === "visible") live.current.resync(); }, 4000);
+    return () => {
+      supabase.removeChannel(channel);
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+      window.removeEventListener("online", onWake);
+      clearInterval(timer);
+    };
+  }, [sessionId]);
+
+  // ─── SESSION ──────────────────────────────────────────────────────────────
+  const beginSession = (code, host, partner) => {
+    setSessionCode(code);
+    setIsHost(host);
+    setPartnerName(partner);
+    setPartnerConnected(!host);
+    setPartnerLeft(false);
+    setPartnerVotes({});
+    setSessionId(code);
+    saveActive({ code, pid: pidRef.current, host, myName: myName.trim(), partnerName: partner });
+    setResumable(null);
+    setResumeError(false);
+  };
+
   const createSession = async () => {
     if (busy) return;
     setBusy(true);
     setCreateError(null);
     const code = generateCode();
-    setSessionCode(code);
     let error = null;
     try {
       ({ error } = await supabase.from("sessions").insert({
         id: code,
         status: "waiting",
-        host_name: myName || "Vous",
+        host_name: myName.trim() || null,
       }));
     } catch (e) {
       error = e;
@@ -926,8 +1082,9 @@ export default function CineMatch() {
       setCreateError("network");
       return;
     }
-    track("session_created");
-    setSessionId(code);
+    pidRef.current = generateUserId();
+    beginSession(code, true, "");
+    track("session_created", { named: !!myName.trim() });
     setScreen("waiting");
   };
 
@@ -949,96 +1106,173 @@ export default function CineMatch() {
     }
 
     try {
-      await supabase.from("sessions").update({ partner_name: myName || "Partenaire", status: "active" }).eq("id", code);
+      const { error: upErr } = await supabase.from("sessions").update({ partner_name: myName.trim() || "Partenaire", status: "active" }).eq("id", code);
+      if (upErr) throw upErr;
     } catch (e) {
       setBusy(false);
       setJoinError("network");
       return;
     }
     setBusy(false);
-    track("session_joined");
-    setSessionId(code);
-    setPartnerName(data.host_name || "Votre partenaire");
-    setPartnerConnected(true);
+    pidRef.current = generateUserId();
+    beginSession(code, false, data.host_name || "");
+    track("session_joined", { named: !!myName.trim() });
+    startedAtRef.current = Date.now();
     setScreen("genre");
   };
 
-  // ─── VOTE ─────────────────────────────────────────────────────────────────
-  const castVote = async (movieId, liked) => {
-    if (!sessionId) return;
-    await supabase.from("votes").insert({
-      session_id: sessionId,
-      user_id: userId,
-      movie_id: movieId,
-      liked,
+  // Reprise apres un rechargement de page : on reconstruit l'etat depuis Supabase
+  const resumeSession = async () => {
+    const s = resumable;
+    if (!s || busy) return;
+    setBusy(true);
+    setResumeError(false);
+    let row = null, votes = [];
+    try {
+      const [{ data, error }, { data: v }] = await fetchSessionState(s.code);
+      if (error && !isNetworkError(error)) { clearActive(); setResumable(null); setBusy(false); return; }
+      if (error || !data) throw error || new Error("session");
+      row = data; votes = v || [];
+    } catch {
+      setBusy(false);
+      setResumeError(true);
+      return;
+    }
+
+    pidRef.current = s.pid;
+    setMyName(s.myName || "");
+    const mine = votes.filter((v) => v.user_id === s.pid);
+    const theirs = votes.filter((v) => v.user_id !== s.pid);
+
+    // Genres : derniere manche, ou j'en etais, ce que j'ai aime
+    let round = 0;
+    mine.forEach((v) => { if (v.movie_id < 0) round = Math.max(round, decodeGenreVote(v.movie_id).round); });
+    const likes = new Set();
+    let idx = 0;
+    mine.forEach((v) => {
+      if (v.movie_id >= 0) return;
+      const d = decodeGenreVote(v.movie_id);
+      if (d.round !== round) return;
+      idx = Math.max(idx, d.idx + 1);
+      if (v.liked) likes.add(d.idx); else likes.delete(d.idx);
     });
+    // Les genres en commun deja vus ne reapparaissent pas en fenetre
+    const theirLikes = new Set();
+    theirs.forEach((v) => {
+      if (v.movie_id >= 0) return;
+      const d = decodeGenreVote(v.movie_id);
+      if (d.round === round && v.liked) theirLikes.add(d.idx);
+    });
+    likes.forEach((i) => { if (theirLikes.has(i)) shownGenreRef.current.add(GENRES[i].id); });
+    setGenreRound(round);
+    setGenreIdx(idx);
+    setMyGenreLikes(likes);
+
+    const partner = s.host ? row.partner_name : row.host_name;
+    setSessionCode(s.code);
+    setIsHost(!!s.host);
+    setPartnerName(partner || s.partnerName || "");
+    setPartnerConnected(s.host ? !!row.partner_name : true);
+    setPartnerLeft(false);
+    setPartnerVotes({});
+    setSessionId(s.code);
+    saveActive(s);
+    setResumable(null);
+    track("session_resumed");
+
+    // Films : on reprend la liste partagee a la premiere carte non votee
+    let list = [];
+    try { list = JSON.parse(row.movie_list || "[]"); } catch {}
+    const g = GENRES.find((x) => x.id === genreOfKey(row.genre_id));
+    if (idx >= GENRES.length && g && list.length > 0) {
+      const voted = new Set(mine.filter((v) => v.movie_id > 0).map((v) => v.movie_id));
+      const liked = new Set(mine.filter((v) => v.movie_id > 0 && v.liked).map((v) => v.movie_id));
+      listKeyRef.current = row.genre_id;
+      selGenreRef.current = g;
+      setSelGenre(g);
+      setMovies(list);
+      setListVersion((v) => v + 1);
+      setMyMovieLikes(new Set(list.filter((m) => liked.has(m.id)).map((m) => m.id)));
+      let i = 0;
+      while (i < list.length && voted.has(list[i].id)) i++;
+      setMovieIdx(i);
+      setScreen("movie");
+    } else {
+      setScreen(s.host && !row.partner_name ? "waiting" : "genre");
+    }
+    setBusy(false);
   };
 
-  const onGenreSwipe = async (liked) => {
-    const genre = GENRES[genreIdx];
+  // Le partenaire est parti : on continue en solo avec ce qu'on a deja aime
+  const continueAlone = () => {
+    track("continue_alone", { screen });
+    clearActive();
+    setNotice(null);
+    setSessionId(null);
+    pidRef.current = null;
+    setPartnerConnected(false);
+    setPartnerLeft(false);
+    setPartnerVotes({});
+    setGenreMatchQueue([]);
+    setGenreMatch(null);
+    setSoloPicks(movies.filter((m) => myMovieLikes.has(m.id)));
+  };
+
+  // ─── VOTE ─────────────────────────────────────────────────────────────────
+  // Envoi sans bloquer l'interface, avec deux nouvelles tentatives en cas d'echec
+  const castVote = (movieId, liked, code = sessionId, attempt = 0) => {
+    if (!code || !pidRef.current) return;
+    const pid = pidRef.current;
+    const retry = () => {
+      if (attempt < 2) setTimeout(() => { if (pidRef.current === pid) castVote(movieId, liked, code, attempt + 1); }, 1500 * (attempt + 1));
+    };
+    supabase.from("votes").insert({ session_id: code, user_id: pid, movie_id: movieId, liked })
+      .then(({ error }) => { if (error) retry(); }, retry);
+  };
+
+  const onGenreSwipe = (liked) => {
     const gIdx = genreIdx;
-
-    if (liked) {
-      setMyGenreLikes(prev => { const n = new Set(prev); n.add(gIdx); return n; });
-      await castVote(-(gIdx + 1), true);
-
-      if (isSolo) {
-        if (Math.random() > 0.5) {
-          setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
-          setGenreMatchQueue(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
-          setGenreIdx(i => i + 1);
-          return;
-        }
-      } else if (partnerGenreLikes.has(gIdx)) {
-        setMatchedGenres(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
-        setGenreMatchQueue(prev => prev.find(g => g.id === genre.id) ? prev : [...prev, genre]);
-        setGenreIdx(i => i + 1);
-        return;
-      }
-    } else {
-      await castVote(-(gIdx + 1), false);
+    if (gIdx >= GENRES.length) return;
+    if (!startedAtRef.current) startedAtRef.current = Date.now();
+    if (liked) setMyGenreLikes((prev) => new Set(prev).add(gIdx));
+    castVote(genreVoteId(genreRound, gIdx), liked);
+    setGenreIdx(gIdx + 1);
+    if (gIdx + 1 === GENRES.length) {
+      track("genres_done", { liked: myGenreLikes.size + (liked && !myGenreLikes.has(gIdx) ? 1 : 0), solo: isSolo });
     }
-    setGenreIdx(i => i + 1);
+  };
+
+  // Aucun genre en commun : nouvelle manche (les votes precedents ne comptent plus)
+  const restartGenres = () => {
+    track("genres_restarted", { solo: isSolo });
+    shownGenreRef.current = new Set();
+    setGenreRound((r) => r + 1);
+    setGenreIdx(0);
+    setMyGenreLikes(new Set());
+    setGenreMatchQueue([]);
+    setGenreMatch(null);
   };
 
   // ─── MOVIE SWIPE ──────────────────────────────────────────────────────────
-  const onMovieSwipe = async (liked) => {
+  const onMovieSwipe = (liked) => {
     const movie = movies[movieIdx];
-    await castVote(movie.id, liked);
-
+    if (!movie) return;
+    castVote(movie.id, liked);
     if (liked) {
-      setMyMovieLikes(prev => { const n = new Set(prev); n.add(movie.id); return n; });
-      if (isSolo) {
-        if (Math.random() > 0.6) { setMovieMatch(movie); return; }
-      } else if (partnerMovieLikes.has(movie.id)) {
-        setMovieMatch(movie); return;
-      }
+      setMyMovieLikes((prev) => new Set(prev).add(movie.id));
+      if (isSolo) setSoloPicks((prev) => (prev.some((m) => m.id === movie.id) ? prev : [...prev, movie]));
     }
     advance(movieIdx + 1);
   };
 
-  // When partner likes a movie we already liked -> match
-  useEffect(() => {
-    if (!movies.length || screen !== "movie" || movieMatch) return;
-    for (const movieId of partnerMovieLikes) {
-      if (myMovieLikes.has(movieId)) {
-        const movie = movies.find(m => m.id === movieId);
-        if (movie) { setMovieMatch(movie); return; }
-      }
+  // Passe les films deja vus si l'option est active. A deux, un film passe compte
+  // comme un « non », pour que le partenaire ne l'attende pas.
+  const advance = (next, list = movies, skip = skipSeen, seen = seenIds) => {
+    let i = next;
+    if (skip) {
+      while (i < list.length && seen.has(list[i].id)) { castVote(list[i].id, false); i++; }
     }
-  }, [partnerMovieLikes]);
-
-  const advance = (next, movieList, skip, seen) => {
-    const list = movieList || movies;
-    const doSkip = skip !== undefined ? skip : skipSeen;
-    const seenSet = seen || seenIds;
-    if (doSkip) {
-      let i = next;
-      while (i < list.length && seenSet.has(list[i].id)) i++;
-      setMovieIdx(i);
-    } else {
-      setMovieIdx(next);
-    }
+    setMovieIdx(i);
   };
 
   const toggleSeen = (id) => {
@@ -1083,90 +1317,93 @@ export default function CineMatch() {
     });
   };
 
-
-  const startMovies = async (g) => {
+  // Affiche une liste de films (la sienne ou celle choisie par le partenaire)
+  const applyList = (g, list, key, fromPartner) => {
+    if (fromPartner && key && key === listKeyRef.current) return;
+    const sameGenre = selGenreRef.current?.id === g.id;
+    listKeyRef.current = key;
     selGenreRef.current = g;
     setSelGenre(g);
-    setLoading(true);
+    setMovies(list);
+    setListVersion((v) => v + 1);
+    setMyMovieLikes(new Set());
+    setGenreMatchQueue([]);
+    setGenreMatch(null);
+    setDetail(null);
+    setEmptyInfo(null);
+    advance(0, list, skipSeen, seenIds);
+    setScreen("movie");
+    track("movies_loaded", { genre: g.id, count: list.length, solo: isSolo, providers: selectedProviders.length, mood_active: isMoodActive(mood), from_partner: !!fromPartner });
+    if (fromPartner) {
+      setNotice({ kind: "info", text: sameGenre ? `${pName} a relancé une sélection.` : `${pName} a choisi ${g.name}.` });
+    }
+  };
+
+  // fresh = true : nouvelle liste, meme si une liste existe deja pour ce genre
+  const startMovies = async (genre, fresh = false) => {
+    let g = genre;
+    selGenreRef.current = g;
+    setSelGenre(g);
     setEmptyInfo(null);
     setScreen("loading");
     try {
-      let movieList = [];
+      let list = [];
       let empty = null;
+      let key = null;
 
       if (!isSolo) {
-        const { data } = await supabase
-          .from("sessions")
-          .select("movie_list, genre_id")
-          .eq("id", sessionId)
-          .single();
-
-        if (data?.movie_list && data?.genre_id === g.id) {
-          // La liste est deja generee : les deux swipent la meme
-          movieList = JSON.parse(data.movie_list);
+        const { data, error } = await supabase.from("sessions").select("movie_list, genre_id").eq("id", sessionId).single();
+        if (error) throw error;
+        const prevKey = data?.genre_id || null;
+        if (!fresh && prevKey && genreOfKey(prevKey) === g.id && data.movie_list) {
+          // La liste existe deja : les deux swipent la meme
+          list = JSON.parse(data.movie_list);
+          key = prevKey;
         } else {
           // Premier arrive : ses reglages Mood s'appliquent aux deux
           const r = await fetchMovies(g.id, selectedProviders, mood);
-          movieList = r.movies;
+          list = r.movies;
           empty = r.empty;
-          if (movieList.length > 0) {
-            // Ecriture conditionnelle : seulement si personne n'a deja enregistre
-            // une liste pour ce genre. Si les deux choisissent le genre en meme
-            // temps, le premier gagne et le second reprend sa liste : les deux
-            // swipent exactement les memes films.
-            const { data: written } = await supabase.from("sessions").update({
-              genre_id: g.id,
-              movie_list: JSON.stringify(movieList),
-            }).eq("id", sessionId)
-              .or(`genre_id.is.null,genre_id.neq.${g.id}`)
-              .select("id");
+          if (list.length > 0) {
+            key = newListKey(g.id);
+            listKeyRef.current = key; // notre propre mise a jour sera ignoree
+            // Ecriture conditionnelle : si le partenaire a choisi au meme moment,
+            // la premiere ecriture gagne et l'autre reprend sa liste.
+            let q = supabase.from("sessions").update({ genre_id: key, movie_list: JSON.stringify(list) }).eq("id", sessionId);
+            q = prevKey ? q.eq("genre_id", prevKey) : q.is("genre_id", null);
+            const { data: written, error: wErr } = await q.select("id");
+            if (wErr) throw wErr;
             if (!written || written.length === 0) {
-              const { data: again } = await supabase
-                .from("sessions")
-                .select("movie_list, genre_id")
-                .eq("id", sessionId)
-                .single();
-              if (again?.movie_list && again.genre_id === g.id) {
-                movieList = JSON.parse(again.movie_list);
+              const { data: again } = await supabase.from("sessions").select("movie_list, genre_id").eq("id", sessionId).single();
+              const g2 = GENRES.find((x) => x.id === genreOfKey(again?.genre_id));
+              if (again?.movie_list && g2) {
+                list = JSON.parse(again.movie_list);
+                key = again.genre_id;
+                g = g2;
               }
             }
           }
         }
       } else {
         const r = await fetchMovies(g.id, selectedProviders, mood);
-        movieList = r.movies;
+        list = r.movies;
         empty = r.empty;
       }
 
-      if (movieList.length === 0) {
+      if (list.length === 0) {
         track("movies_empty", { genre: g.id, reason: empty?.reason || "criteria", providers: selectedProviders.length });
         setEmptyInfo(empty || { reason: "criteria" });
         setScreen("empty");
-        setLoading(false);
         return;
       }
-
-      track("movies_loaded", { genre: g.id, count: movieList.length, solo: isSolo, providers: selectedProviders.length, mood_active: isMoodActive(mood) });
-      setMovies(movieList);
-      let startIdx = 0;
-      if (skipSeen) {
-        while (startIdx < movieList.length && seenIds.has(movieList[startIdx].id)) startIdx++;
-      }
-      setMovieIdx(startIdx);
-      setMyMovieLikes(new Set());
-      setPartnerMovieLikes(new Set());
-      setGenreMatchQueue([]);
-      setGenreMatch(null);
-      setScreen("movie");
+      applyList(g, list, key, false);
     } catch (e) {
       console.error("startMovies error:", e);
-      track("movies_error", { genre: g?.id });
-      setScreen("genre");
+      track("movies_error", { genre: g?.id, solo: isSolo });
+      setScreen("loadError");
     }
-    setLoading(false);
   };
 
-  
   const toggleWishlist = (movie) => {
     setWishlist(prev => {
       const exists = prev.find(m => m.id === movie.id);
@@ -1298,52 +1535,43 @@ export default function CineMatch() {
     (imdbFiles.seen?.skipped || 0) + (imdbFiles.wish?.skipped || 0),
   );
 
+  // Lien d'invitation, marque pour mesurer le bouche-a-oreille
+  const inviteUrl = `${window.location.origin}/?join=${sessionCode}&utm_source=invitation`;
   const copyLink = () => {
-    const url = `${window.location.origin}?join=${sessionCode}`;
-    navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+    navigator.clipboard.writeText(inviteUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   };
 
   const reset = () => {
     selGenreRef.current = null;
-    setScreen("home"); setGenreIdx(0); setMatchedGenres([]); setMovies([]);
-    setMovieMatch(null); setGenreMatch(null); setSessionId(null);
-    setPartnerConnected(false); setMyGenreLikes(new Set()); setPartnerGenreLikes(new Set());
-    setPartnerMovieLikes(new Set()); setPendingGenreMatch(null); setGenreMatchQueue([]); lastPartnerGenreRef.current = -1;
-    setMovieIdx(0); setMyMovieLikes(new Set()); setSelGenre(null); setPartnerName(""); setSessionCode("");
+    listKeyRef.current = null;
+    pidRef.current = null;
+    startedAtRef.current = null;
+    shownGenreRef.current = new Set();
+    shownMovieRef.current = new Set();
+    clearActive();
+    setScreen("home"); setGenreRound(0); setGenreIdx(0); setMyGenreLikes(new Set()); setMovies([]);
+    setMovieMatch(null); setGenreMatch(null); setGenreMatchQueue([]); setSessionId(null); setIsHost(false);
+    setPartnerConnected(false); setPartnerLeft(false); setPartnerVotes({}); setNotice(null);
+    setMovieIdx(0); setMyMovieLikes(new Set()); setSoloPicks([]); setSelGenre(null); setPartnerName(""); setSessionCode("");
     setCreateError(null); setJoinError(null); setDetail(null); setEmptyInfo(null);
+    setWatchAnswer(null); setFeedbackText(""); setFeedbackSent(false);
   };
 
-  // Auto-join from URL
+  // Lien d'invitation (?join=CODE) : on ouvre l'ecran « Rejoindre », puis on
+  // retire le code de l'adresse pour qu'un rechargement ne rejoigne pas une 2e fois.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("join");
-    if (code) { setJoinCode(code); setScreen("join"); }
+    if (!code) return;
+    params.delete("join");
+    const qs = params.toString();
+    try { window.history.replaceState(null, "", window.location.pathname + (qs ? `?${qs}` : "")); } catch {}
+    // Deja dans cette session (page rechargee) : l'accueil propose de la reprendre
+    // (si on etait l'hote, c'est un test a deux onglets : on rejoint normalement)
+    if (resumable && !resumable.host && resumable.code === code.toUpperCase()) return;
+    setJoinCode(code.toUpperCase());
+    setScreen("join");
   }, []);
-
-  // Watch for partner joining
-useEffect(() => {
-    if (!sessionId) return;
-    const channel = supabase
-      .channel(`waiting:${sessionId}`)
-      .on("postgres_changes", {
-        event: "UPDATE",
-        schema: "public",
-        table: "sessions",
-        filter: `id=eq.${sessionId}`,
-      }, (payload) => {
-	  if (payload.new?.partner_name) {
-	    setPartnerName(payload.new.partner_name);
-	    setPartnerConnected(true);
-	    setScreen("genre");
-	  }
-	  if (payload.new?.genre_id) {
-	    const genre = GENRES.find(g => g.id === payload.new.genre_id);
-	    if (genre) startMovies(genre);
-	  }
-	})
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [sessionId]);
 
   // Ecrans de swipe en version « soir » (fond aubergine), le reste sur papier creme
   const C = ["genre", "movie", "loading"].includes(screen) ? DARK : LIGHT;
@@ -1355,7 +1583,7 @@ useEffect(() => {
   // ─── RETOUR A L'ACCUEIL ───────────────────────────────────────────────────
   // Depuis un ecran de reglages : retour direct. Pendant une partie : on demande
   // confirmation, car la session (et les votes en cours) est abandonnee.
-  const FLOW_SCREENS = ["waiting", "genre", "genrePick", "loading", "movie", "empty", "final"];
+  const FLOW_SCREENS = ["waiting", "genre", "genrePick", "loading", "movie", "empty", "loadError", "picks", "final"];
   const inFlow = FLOW_SCREENS.includes(screen);
   const [confirmHome, setConfirmHome] = useState(false);
   const goHome = () => {
@@ -1365,8 +1593,34 @@ useEffect(() => {
   };
   const confirmGoHome = () => {
     track("session_left", { screen, solo: isSolo });
+    // Prevenir le partenaire (lu par sa resynchronisation)
+    if (sessionId && pidRef.current) {
+      supabase.from("sessions").update({ status: `left_${pidRef.current}` }).eq("id", sessionId).then(() => {}, () => {});
+    }
     setConfirmHome(false);
     reset();
+  };
+
+  const finishMatch = () => {
+    clearActive();
+    setMovieMatch(null);
+    setScreen("final");
+  };
+  const continueAfterMatch = () => {
+    track("continue_after_match", { solo: isSolo });
+    setMovieMatch(null);
+    if (screen === "picks" && !movieDone) setScreen("movie");
+  };
+
+  const answerWatch = (a) => {
+    setWatchAnswer(a);
+    track("watch_intent", { answer: a, solo: isSolo, genre: selGenreRef.current?.id });
+  };
+  const sendFeedback = () => {
+    const text = feedbackText.trim();
+    if (!text) return;
+    track("feedback_text", { text: text.slice(0, 1000), watch: watchAnswer, solo: isSolo, screen });
+    setFeedbackSent(true);
   };
 
   // Boutons : principal (corail), secondaire (contour bleu, creme le soir), discret (jaune)
@@ -1466,8 +1720,8 @@ useEffect(() => {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {inFlow && screen !== "final" && (
                 <div style={{ border: `2px solid ${C.line}`, borderRadius: 999, padding: "5px 12px", fontSize: 13, fontWeight: 600, color: C.ink, display: "flex", alignItems: "center", gap: 6, maxWidth: 130, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {partnerConnected && <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.dark ? T.yellow : T.green, flexShrink: 0 }} />}
-                  {partnerConnected ? partnerName : (isSolo ? "Solo" : "En attente…")}
+                  {partnerActive && <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.dark ? T.yellow : T.green, flexShrink: 0 }} />}
+                  {isSolo ? "Solo" : partnerLeft ? `${partnerName || "Partenaire"} est parti` : partnerConnected ? (partnerName || "Partenaire") : "En attente…"}
                 </div>
               )}
               <button onClick={goHome} aria-label="Retour à l'accueil" title="Accueil" className="cm-btn"
@@ -1483,12 +1737,25 @@ useEffect(() => {
           {/* HOME */}
           {screen === "home" && (
             <div style={{ paddingTop: 12, padding: "12px 4px 0" }}>
+              {resumable && (
+                <div style={{ position: "relative", overflow: "hidden", background: T.yellow, border: `2px solid ${T.ink}`, borderRadius: 14, boxShadow: `3px 3px 0 ${T.ink}`, padding: "12px 14px", marginBottom: 18 }}>
+                  <div style={{ ...eyebrow, marginBottom: 4 }}>Session en cours</div>
+                  <div style={{ fontSize: 15, lineHeight: 1.45, marginBottom: 10 }}>
+                    {resumable.partnerName ? `Avec ${resumable.partnerName} · ` : ""}code <strong style={{ fontFamily: T.display, letterSpacing: 2 }}>{resumable.code}</strong>
+                  </div>
+                  {resumeError && <div role="alert" style={{ fontSize: 14, lineHeight: 1.5, color: T.red, fontWeight: 700, marginBottom: 10 }}>Connexion impossible. Réessayez dans une minute.</div>}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="cm-btn" onClick={resumeSession} disabled={busy} style={{ flex: 1.4, height: 46, border: "none", borderRadius: 12, background: T.coral, color: T.white, fontFamily: T.body, fontWeight: 700, fontSize: 15, cursor: "pointer", boxShadow: `3px 3px 0 ${T.ink}` }}>{busy ? "Reprise…" : "Reprendre"}</button>
+                    <button onClick={() => { clearActive(); setResumable(null); setResumeError(false); }} style={{ flex: 1, height: 46, border: `2px solid ${T.ink}`, borderRadius: 12, background: "transparent", color: T.ink, fontFamily: T.body, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Ignorer</button>
+                  </div>
+                </div>
+              )}
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 14, animation: "float 3.5s ease-in-out infinite" }}><Matches size={170} /></div>
               <h1 style={{ fontFamily: T.display, fontWeight: 400, fontSize: 36, lineHeight: 1.05, marginBottom: 12 }}>Ce soir, on regarde quoi ?</h1>
               <div style={{ fontSize: 16, lineHeight: 1.5, marginBottom: 28 }}>Deux envies, quelques films, et une étincelle à trouver.</div>
               <Btn onClick={() => { setCreateError(null); setScreen("create"); }}>Créer une session</Btn>
               <Btn outline onClick={() => { setJoinError(null); setScreen("join"); }}>Rejoindre une session</Btn>
-              <Btn tertiary onClick={() => { track("solo_started"); setScreen("genre"); }}>Mode solo</Btn>
+              <Btn tertiary onClick={() => { track("solo_started"); startedAtRef.current = Date.now(); setScreen("genre"); }}>Mode solo</Btn>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center", marginTop: 4 }}>
                 <button onClick={() => setScreen("mood")} style={linkBtn(isMoodActive(mood))}>Mood{isMoodActive(mood) ? " (actif)" : ""}</button>
                 <button onClick={() => setScreen("providers")} style={linkBtn(selectedProviders.length > 0)}>Plateformes{selectedProviders.length > 0 ? ` (${selectedProviders.length})` : ""}</button>
@@ -1523,11 +1790,11 @@ useEffect(() => {
             <div style={{ paddingTop: 28 }}>
               <div style={{ ...h2, marginBottom: 8 }}>Nouvelle session</div>
               <div style={{ fontSize: 16, marginBottom: 22 }}>Entrez votre prénom, puis invitez votre partenaire de canapé.</div>
-              <input placeholder="Votre prénom" aria-label="Votre prénom" value={myName} onChange={e => setMyName(e.target.value)} style={inputStyle} />
+              <input placeholder="Votre prénom (facultatif)" aria-label="Votre prénom, facultatif" value={myName} onChange={e => setMyName(e.target.value)} style={inputStyle} />
               {createError === "network" && (
                 <ErrorBox title="Connexion impossible">Le service est momentanément indisponible. Réessayez dans une minute.</ErrorBox>
               )}
-              <Btn onClick={createSession} disabled={!myName.trim() || busy}>{busy ? "Création…" : createError ? "Réessayer" : "Créer et inviter"}</Btn>
+              <Btn onClick={createSession} disabled={busy}>{busy ? "Création…" : createError ? "Réessayer" : "Créer et inviter"}</Btn>
               <Btn outline onClick={() => setScreen("home")}>Retour</Btn>
             </div>
           )}
@@ -1547,7 +1814,7 @@ useEffect(() => {
 
               {/* QR Code */}
               <div style={{ marginBottom: 20 }}>
-                <QRCode value={`${window.location.origin}?join=${sessionCode}`} />
+                <QRCode value={inviteUrl} />
               </div>
 
               <Btn outline onClick={copyLink}>
@@ -1567,8 +1834,8 @@ useEffect(() => {
             <div style={{ paddingTop: 28 }}>
               <div style={{ ...h2, marginBottom: 8 }}>Rejoindre une session</div>
               <div style={{ fontSize: 16, marginBottom: 22 }}>Entrez le code partagé par votre partenaire.</div>
-              <input placeholder="Votre prénom" aria-label="Votre prénom" value={myName} onChange={e => setMyName(e.target.value)} style={inputStyle} />
-              <input placeholder="Code (ex : ABC123)" aria-label="Code de session" aria-invalid={joinError === "notfound"} value={joinCode} onChange={e => { setJoinCode(e.target.value.toUpperCase()); if (joinError) setJoinError(null); }}
+              <input placeholder="Votre prénom (facultatif)" aria-label="Votre prénom, facultatif" value={myName} onChange={e => setMyName(e.target.value)} style={inputStyle} />
+              <input placeholder="Code (ex : KXR7MP)" aria-label="Code de session" aria-invalid={joinError === "notfound"} value={joinCode} onChange={e => { setJoinCode(e.target.value.toUpperCase()); if (joinError) setJoinError(null); }}
                 style={{ ...inputStyle, height: 60, fontFamily: T.display, fontSize: 22, letterSpacing: 4, textAlign: "center", ...(joinError === "notfound" ? { border: `2px solid ${T.red}`, marginBottom: 8 } : {}) }} />
               {joinError === "notfound" && (
                 <div role="alert" style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 14, lineHeight: 1.5, color: T.red, fontWeight: 600, marginBottom: 18 }}>
@@ -1579,7 +1846,7 @@ useEffect(() => {
               {joinError === "network" && (
                 <ErrorBox title="Connexion impossible">Le service est momentanément indisponible. Réessayez dans une minute.</ErrorBox>
               )}
-              <Btn onClick={joinSession} disabled={!joinCode.trim() || !myName.trim() || busy}>{busy ? "Connexion…" : joinError === "network" ? "Réessayer" : "Rejoindre"}</Btn>
+              <Btn onClick={joinSession} disabled={!joinCode.trim() || busy}>{busy ? "Connexion…" : joinError === "network" ? "Réessayer" : "Rejoindre"}</Btn>
               <Btn outline onClick={() => setScreen("home")}>Retour</Btn>
             </div>
           )}
@@ -1611,7 +1878,7 @@ useEffect(() => {
               {partnerConnected && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, border: `2px solid ${C.line}`, borderRadius: 12, padding: "9px 14px", marginBottom: 14, fontSize: 14, color: C.mid }}>
                   <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.yellow, flexShrink: 0 }} />
-                  <span><strong style={{ color: C.ink }}>{partnerName}</strong> swipe en même temps que vous</span>
+                  <span><strong style={{ color: C.ink }}>{pName}</strong> swipe en même temps que vous</span>
                 </div>
               )}
               <div style={{ position: "relative", height: 320, marginBottom: 24 }}>
@@ -1627,21 +1894,27 @@ useEffect(() => {
             </div>
           )}
 
+          {/* GENRE DONE - attente du partenaire */}
+          {screen === "genre" && genreDone && waitGenres && !genreMatch && (
+            <WaitPartner title="Vous avez fini !" C={C} done={partnerGenre.voted.size} total={GENRES.length} name={pName}
+              text={`${pName} choisit encore ses genres. Les genres en commun s'afficheront dès qu'il ou elle aura terminé.`} />
+          )}
+
           {/* GENRE DONE - no match */}
-          {screen === "genre" && genreDone && matchedGenres.length === 0 && (
+          {screen === "genre" && genreDone && !waitGenres && !genreMatch && matchedGenres.length === 0 && (
             <div style={{ textAlign: "center", paddingTop: 48 }}>
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 18, opacity: 0.85 }}><Matches size={130} ink={T.paper} /></div>
-              <div style={{ ...h2, marginBottom: 10 }}>Pas encore d'étincelle…</div>
-              <div style={{ fontSize: 16, lineHeight: 1.5, color: C.mid, marginBottom: 26 }}>Aucun genre en commun cette fois. On recommence ?</div>
-              <Btn onClick={() => { setGenreIdx(0); setMatchedGenres([]); setMyGenreLikes(new Set()); setPartnerGenreLikes(new Set()); }}>Recommencer</Btn>
+              <div style={{ ...h2, marginBottom: 10 }}>{isSolo ? "Aucun genre retenu" : "Pas encore d'étincelle…"}</div>
+              <div style={{ fontSize: 16, lineHeight: 1.5, color: C.mid, marginBottom: 26 }}>{isSolo ? "Vous n'avez aimé aucun genre. On recommence ?" : "Aucun genre en commun cette fois. On recommence ?"}</div>
+              <Btn onClick={restartGenres}>Recommencer</Btn>
             </div>
           )}
 
           {/* GENRE DONE - pick */}
-          {screen === "genre" && genreDone && !genreMatch && matchedGenres.length > 0 && (
+          {screen === "genre" && genreDone && !waitGenres && !genreMatch && matchedGenres.length > 0 && (
             <div style={{ paddingTop: 16 }}>
-              <div style={{ ...eyebrow, marginBottom: 8 }}>Genres en commun</div>
-              <div style={{ ...h2, marginBottom: 8 }}><span style={{ color: T.yellow }}>{matchedGenres.length} genre{matchedGenres.length > 1 ? "s" : ""}</span> en commun</div>
+              <div style={{ ...eyebrow, marginBottom: 8 }}>{isSolo ? "Vos genres du soir" : "Genres en commun"}</div>
+              <div style={{ ...h2, marginBottom: 8 }}><span style={{ color: T.yellow }}>{matchedGenres.length} genre{matchedGenres.length > 1 ? "s" : ""}</span> {isSolo ? (matchedGenres.length > 1 ? "retenus" : "retenu") : "en commun"}</div>
               <div style={{ fontSize: 16, color: C.mid, marginBottom: 18 }}>Choisissez-en un pour voir les films.</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 {matchedGenres.map(g => (
@@ -1681,26 +1954,85 @@ useEffect(() => {
               <div style={{ position: "relative", height: 440, marginBottom: 20 }}>
                 {movieIdx + 2 < movies.length && <div style={stackBehind(2)} />}
                 {movieIdx + 1 < movies.length && <div style={stackBehind(1)} />}
-                <MovieCard key={`${selGenre?.id}-${movieIdx}`} movie={cur} rating={ratings[cur.id]} onSwipe={onMovieSwipe} onDetail={() => setDetail(cur)} seenIds={seenIds} onToggleSeen={toggleSeen} wishlist={wishlist} onToggleWishlist={toggleWishlist} />
+                <MovieCard key={`${listVersion}-${movieIdx}`} movie={cur} rating={ratings[cur.id]} onSwipe={onMovieSwipe} onDetail={() => setDetail(cur)} seenIds={seenIds} onToggleSeen={toggleSeen} wishlist={wishlist} onToggleWishlist={toggleWishlist} />
               </div>
               <div style={{ display: "flex", justifyContent: "center", gap: 40, marginBottom: 12 }}>
                 <button onClick={() => onMovieSwipe(false)} aria-label="Je passe" style={swipeBtn(false, C)}><Icon name="x" size={28} color={C.ink} /></button>
                 <button className="cm-btn" onClick={() => onMovieSwipe(true)} aria-label="J'aime" style={swipeBtn(true, C)}><Icon name="heart" size={30} color={T.white} /></button>
               </div>
+              {isSolo && soloPicks.length > 0 && (
+                <Btn tertiary onClick={() => { track("solo_picks_opened", { count: soloPicks.length }); setScreen("picks"); }}>Mes coups de cœur ({soloPicks.length})</Btn>
+              )}
               <div style={{ textAlign: "center" }}>
                 <button onClick={() => setScreen("genre")} style={{ ...linkBtn(false), color: C.link }}>Changer de genre</button>
               </div>
             </div>
           )}
 
+          {/* ATTENTE DU PARTENAIRE EN FIN DE LISTE */}
+          {screen === "movie" && movieDone && waitMovies && !movieMatch && (
+            <WaitPartner title="Vous avez fini !" C={C} done={partnerMovieVoted} total={movies.length}
+              text={`${pName} swipe encore. Si vous aimez le même film, le match s'affichera ici.`}>
+              <div style={{ marginTop: 22 }}>
+                <button onClick={() => setScreen("genre")} style={{ ...linkBtn(false), color: C.link }}>Changer de genre</button>
+              </div>
+            </WaitPartner>
+          )}
+
           {/* NO MATCH */}
-          {screen === "movie" && movieDone && !movieMatch && (
+          {screen === "movie" && movieDone && !isSolo && !waitMovies && !movieMatch && (
             <div style={{ textAlign: "center", paddingTop: 48 }}>
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 18, opacity: 0.85 }}><Matches size={130} ink={T.paper} /></div>
               <div style={{ ...h2, marginBottom: 10 }}>Pas encore d'étincelle…</div>
               <div style={{ fontSize: 16, lineHeight: 1.5, color: C.mid, marginBottom: 26 }}>Vos envies ne se sont pas croisées cette fois. Changez de genre ou relancez une sélection : le prochain film est peut-être le bon.</div>
               <Btn onClick={() => setScreen("genre")}>Choisir un autre genre</Btn>
-              <Btn outline onClick={() => startMovies(selGenre)}>Relancer ce genre</Btn>
+              <Btn outline onClick={() => startMovies(selGenre, true)}>Relancer ce genre</Btn>
+            </div>
+          )}
+
+          {/* SOLO : COUPS DE COEUR */}
+          {screen === "picks" && (
+            <div style={{ paddingTop: 16 }}>
+              <div style={{ ...h2, marginBottom: 8 }}>Vos coups de cœur</div>
+              <div style={{ fontSize: 16, lineHeight: 1.5, marginBottom: 18 }}>
+                {soloPicks.length > 0 ? "Il ne reste qu'à trancher." : "Aucun coup de cœur sur cette sélection. Relancez-en une autre ou changez de genre."}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 }}>
+                {soloPicks.map((m) => (
+                  <div key={m.id} style={listRow}>
+                    <div style={{ width: 40, height: 60, borderRadius: 6, overflow: "hidden", flexShrink: 0, border: `1.5px solid ${T.ink}` }}>
+                      <Poster url={m.poster} title={m.title} style={{ width: "100%", height: "100%" }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</div>
+                      <div style={{ fontSize: 14, color: C.sub, marginTop: 2 }}>{m.year}</div>
+                    </div>
+                    <button className="cm-btn" onClick={() => setMovieMatch(m)}
+                      style={{ flexShrink: 0, height: 44, padding: "0 12px", border: "none", borderRadius: 10, background: T.coral, color: T.white, fontFamily: T.body, fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: `2px 2px 0 ${T.ink}` }}>
+                      C'est celui-là
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {!movieDone ? (
+                <Btn outline onClick={() => setScreen("movie")}>Continuer à swiper</Btn>
+              ) : (
+                <>
+                  <Btn outline onClick={() => startMovies(selGenre, true)}>Relancer ce genre</Btn>
+                  <Btn outline onClick={() => setScreen("genre")}>Choisir un autre genre</Btn>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* PANNE AU CHARGEMENT DES FILMS */}
+          {screen === "loadError" && (
+            <div style={{ paddingTop: 40, textAlign: "center" }}>
+              <div style={{ ...h2, marginBottom: 12 }}>Les films ne répondent pas</div>
+              <div style={{ fontSize: 16, lineHeight: 1.5, marginBottom: 20 }}>Le service qui fournit les films est momentanément indisponible. Vos choix sont conservés.</div>
+              <ErrorBox title="Ce n'est pas lié à vos réglages">Réessayez dans quelques secondes.</ErrorBox>
+              <Btn onClick={() => selGenre && startMovies(selGenre)}>Réessayer</Btn>
+              <Btn outline onClick={() => setScreen("genre")}>Choisir un autre genre</Btn>
             </div>
           )}
 
@@ -2066,14 +2398,60 @@ useEffect(() => {
             <div style={{ textAlign: "center", paddingTop: 44 }}>
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 16, animation: "float 3.5s ease-in-out infinite" }}><Matches size={170} /></div>
               <div style={{ fontFamily: T.display, fontSize: 34, lineHeight: 1.05, marginBottom: 10 }}>Bonne séance !</div>
-              <div style={{ fontSize: 16, marginBottom: 30 }}>Éteignez les lumières, on s'occupe du reste.</div>
-              <Btn onClick={reset}>Nouvelle session</Btn>
+              <div style={{ fontSize: 16, marginBottom: 24 }}>Éteignez les lumières, on s'occupe du reste.</div>
+              <div style={{ background: T.surface, border: `2px solid ${T.ink}`, borderRadius: 14, boxShadow: `3px 3px 0 ${T.ink}`, padding: 16, textAlign: "left", marginBottom: 18 }}>
+                {feedbackSent ? (
+                  <div role="status" style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 16, fontWeight: 700 }}>
+                    <Icon name="check" size={20} color={T.green} /> Merci, c'est noté.
+                  </div>
+                ) : (
+                  <>
+                    <div id="cm-watch-q" style={{ fontWeight: 700, fontSize: 16, marginBottom: 10 }}>Vous allez regarder ce film ?</div>
+                    <div role="group" aria-labelledby="cm-watch-q" style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                      {["Oui", "Peut-être", "Non"].map((a) => (
+                        <button key={a} aria-pressed={watchAnswer === a} onClick={() => answerWatch(a)}
+                          style={{ flex: 1, height: 46, border: `2px solid ${T.ink}`, borderRadius: 12, background: watchAnswer === a ? T.yellow : T.paper, boxShadow: watchAnswer === a ? `3px 3px 0 ${T.ink}` : "none", color: T.ink, fontFamily: T.body, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+                          {a}
+                        </button>
+                      ))}
+                    </div>
+                    <label htmlFor="cm-feedback" style={{ display: "block", fontWeight: 700, fontSize: 15, marginBottom: 6 }}>
+                      Un truc à nous dire ? <span style={{ fontWeight: 400, color: C.sub }}>(facultatif)</span>
+                    </label>
+                    <textarea id="cm-feedback" value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} maxLength={1000} rows={3}
+                      placeholder="Un bug, une idée, ce qui vous a manqué…"
+                      style={{ width: "100%", background: T.white, border: `2px solid ${T.ink}`, borderRadius: 10, padding: "10px 12px", color: T.ink, fontSize: 16, fontFamily: T.body, resize: "vertical", marginBottom: 10 }} />
+                    <button className="cm-btn" onClick={sendFeedback} disabled={!feedbackText.trim()}
+                      style={{ width: "100%", height: 48, border: "none", borderRadius: 12, background: T.coral, color: T.white, fontFamily: T.body, fontWeight: 700, fontSize: 16, cursor: feedbackText.trim() ? "pointer" : "default", opacity: feedbackText.trim() ? 1 : 0.45, boxShadow: feedbackText.trim() ? `3px 3px 0 ${T.ink}` : "none" }}>
+                      Envoyer
+                    </button>
+                  </>
+                )}
+              </div>
+              <Btn tertiary onClick={reset}>Nouvelle session</Btn>
             </div>
           )}
         </div>
 
         {genreMatch && <MatchModal item={genreMatch} type="genre" solo={isSolo} onClose={() => { setGenreMatch(null); }} />}
-        {movieMatch && <MatchModal item={movieMatch} type="movie" solo={isSolo} rating={ratings[movieMatch.id]} onClose={() => { setMovieMatch(null); setScreen("final"); }} />}
+        {movieMatch && <MatchModal item={movieMatch} type="movie" solo={isSolo} rating={ratings[movieMatch.id]} onClose={finishMatch} onContinue={continueAfterMatch} />}
+
+        {/* Ce que fait le partenaire */}
+        {notice?.kind === "info" && !movieMatch && !genreMatch && (
+          <div role="status" style={{ position: "fixed", top: 74, left: "50%", transform: "translateX(-50%)", width: "calc(100% - 32px)", maxWidth: 408, zIndex: 250, display: "flex", gap: 10, alignItems: "flex-start", background: T.paper, color: T.ink, border: `2px solid ${T.ink}`, borderRadius: 12, boxShadow: `3px 3px 0 ${T.yellow}`, padding: "10px 14px", fontSize: 15, lineHeight: 1.4 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: T.coral, marginTop: 7, flexShrink: 0 }} />
+            <span><strong>{notice.text}</strong> Vous swipez les mêmes films.</span>
+          </div>
+        )}
+        {notice?.kind === "left" && sessionId && !movieMatch && (
+          <div role="alert" style={{ position: "fixed", top: 74, left: "50%", transform: "translateX(-50%)", width: "calc(100% - 32px)", maxWidth: 408, zIndex: 250, background: T.paper, color: T.ink, border: `2px solid ${T.ink}`, borderRadius: 12, boxShadow: `3px 3px 0 ${T.coral}`, padding: "12px 14px", fontSize: 15, lineHeight: 1.45 }}>
+            <strong>{pName} a quitté la session.</strong><br />Vous pouvez continuer seul ou revenir à l'accueil.
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button className="cm-btn" onClick={continueAlone} style={{ flex: 1, height: 44, border: "none", borderRadius: 10, background: T.coral, color: T.white, fontFamily: T.body, fontWeight: 700, fontSize: 15, cursor: "pointer", boxShadow: `2px 2px 0 ${T.ink}` }}>Continuer seul</button>
+              <button onClick={() => { track("session_left", { screen, solo: false, after_partner_left: true }); reset(); }} style={{ flex: 1, height: 44, border: `2px solid ${T.ink}`, borderRadius: 10, background: "transparent", color: T.ink, fontFamily: T.body, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Accueil</button>
+            </div>
+          </div>
+        )}
         {detail && <DetailPanel movie={detail} rating={ratings[detail.id]} onClose={() => setDetail(null)} />}
 
         {/* Confirmation avant d'abandonner une partie en cours */}

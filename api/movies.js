@@ -119,6 +119,11 @@ export default async function handler(req, res) {
     // au-dela du catalogue (frequent sur les petites plateformes comme
     // Canal+) et renvoyer "aucun film" par intermittence.
     const first = await fetch(`${baseQuery}${providerParam}&page=1`).then((r) => r.json());
+    // TMDB en panne ou limite de debit : on renvoie une vraie erreur, pour que
+    // l'app ne l'affiche pas comme « vos criteres sont trop stricts »
+    if (!first || !Array.isArray(first.results)) {
+      return res.status(502).json({ error: "TMDB indisponible" });
+    }
     const totalPages = Math.min(first.total_pages || 1, 500); // TMDB plafonne a 500
 
     const wantedCount = providers ? 5 : 3;
@@ -132,12 +137,12 @@ export default async function handler(req, res) {
     const pages = await Promise.all(
       pageNums.map((p) =>
         p === 1 ? Promise.resolve(first)
-          : fetch(`${baseQuery}${providerParam}&page=${p}`).then((r) => r.json())
+          : fetch(`${baseQuery}${providerParam}&page=${p}`).then((r) => r.json()).catch(() => null)
       )
     );
 
     const rawMovies = pages
-      .flatMap((p) => p.results || [])
+      .flatMap((p) => p?.results || [])
       .filter((m) => m.poster_path)
       .filter((m, i, arr) => arr.findIndex((x) => x.id === m.id) === i)
       .slice(0, 40);
@@ -176,6 +181,8 @@ export default async function handler(req, res) {
     ]);
 
     let movies = rawMovies.map((m, i) => {
+      // Appel de disponibilite rate (limite de debit TMDB) : on ne sait pas
+      const availabilityUnknown = !providerResults[i] || !providerResults[i].results;
       const frData = providerResults[i]?.results?.FR || {};
       const flatrate = (frData.flatrate || [])
         .filter((p) => PROVIDER_INFO[p.provider_id] || PROVIDER_ALIASES[381]?.includes(p.provider_id))
@@ -213,13 +220,16 @@ export default async function handler(req, res) {
         popularity: m.popularity,
         streamingOn: flatrate,
         trailerKey: trailer?.key || null,
+        availabilityUnknown,
       };
     });
 
     // Filtre strict : seulement les films reellement sur les plateformes choisies
     if (providers) {
       const selectedIds = expandProviderIds(providers.split(",").map(Number));
-      movies = movies.filter((m) =>
+      // Un film dont la disponibilite n'a pas pu etre lue est garde : la
+      // recherche TMDB l'a deja filtre sur ces plateformes.
+      movies = movies.filter((m) => m.availabilityUnknown ||
         m.streamingOn.some((p) =>
           selectedIds.includes(p.id) ||
           (PROVIDER_ALIASES[p.id] || []).some((a) => selectedIds.includes(a))
